@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
-use std::collections::{BTreeMap, };
+
+use crate::bitset::BitSetLike;
 
 use super::{
     rule::{Rule, RuleBuilder},
@@ -145,6 +147,15 @@ impl Grammar {
     pub fn follow_sets(&self) -> FollowSets {
         FollowSets::compute(self)
     }
+
+    /// Compute the augmented first sets for this grammar
+    pub fn augmented_first_set(
+        &self,
+        first_sets: &FirstSets,
+        follow_sets: &FollowSets,
+    ) -> AugmentedFirstSets {
+        AugmentedFirstSets::compute(self, first_sets, follow_sets)
+    }
 }
 
 #[derive(Debug)]
@@ -154,7 +165,7 @@ pub struct FollowSets {
 
 impl FollowSets {
     fn compute(grammar: &Grammar) -> Self {
-        let mut follow_sets: BTreeMap<Symbol, SymbolSet>= BTreeMap::new();
+        let mut follow_sets: BTreeMap<Symbol, SymbolSet> = BTreeMap::new();
         let first_sets = grammar.first_sets();
         let non_terminals = grammar.non_terminals();
 
@@ -162,7 +173,10 @@ impl FollowSets {
             follow_sets.insert(nt, Default::default());
         }
 
-        follow_sets.entry(grammar.start).or_default().add(Symbol::eof());
+        follow_sets
+            .entry(grammar.start)
+            .or_default()
+            .add(Symbol::eof());
 
         let mut changing = true;
 
@@ -193,6 +207,11 @@ impl FollowSets {
 
         Self { inner: follow_sets }
     }
+
+    /// Returns the follow set for the passed symbol
+    pub fn follow(&self, s: Symbol) -> &SymbolSet {
+        &self.inner[&s]
+    }
 }
 
 #[derive(Debug)]
@@ -211,7 +230,9 @@ impl FirstSets {
         let mut out = SymbolSet::new();
         for s in ss {
             let f = self.first(s);
-            if f.contains_epsilon() { break }
+            if !f.contains_epsilon() {
+                break;
+            }
             *out.deref_mut() |= f.deref();
         }
 
@@ -227,7 +248,10 @@ impl FirstSets {
             first_sets.entry(it).or_default().add(it);
         }
 
-        first_sets.entry(Symbol::epsilon()).or_default().add_epsilon();
+        first_sets
+            .entry(Symbol::epsilon())
+            .or_default()
+            .add_epsilon();
 
         for it in &*non_terminals {
             first_sets.insert(it, Default::default());
@@ -241,8 +265,9 @@ impl FirstSets {
                 let mut rhs = first_sets[&rule.rhs()[0]].clone();
                 rhs.remove_epsilon();
 
-                let mut idx= 0;
-                while idx < rule.rhs().len() - 1 && first_sets[&rule.rhs()[idx]].contains_epsilon() {
+                let mut idx = 0;
+                while idx < rule.rhs().len() - 1 && first_sets[&rule.rhs()[idx]].contains_epsilon()
+                {
                     *rhs |= first_sets[&rule.rhs()[idx + 1]].deref();
                     rhs.remove_epsilon();
                     idx += 1;
@@ -261,5 +286,44 @@ impl FirstSets {
         }
 
         Self { inner: first_sets }
+    }
+}
+
+#[derive(Debug)]
+pub struct AugmentedFirstSets {
+    inner: BTreeMap<Symbol, Vec<SymbolSet>>,
+}
+
+impl AugmentedFirstSets {
+    fn compute(grammar: &Grammar, first_sets: &FirstSets, follow_sets: &FollowSets) -> Self {
+        let mut inner: BTreeMap<Symbol, Vec<SymbolSet>> = BTreeMap::new();
+
+        for rule in grammar.rules() {
+            let first = first_sets.first_concat(rule.rhs().iter().copied());
+            let aug = if first.contains_epsilon() {
+                &first | follow_sets.follow(rule.lhs())
+            } else {
+                first
+            };
+
+            inner.entry(rule.lhs()).or_default().push(aug);
+        }
+
+        Self { inner }
+    }
+
+    /// Returns whether the grammar is backtrack free
+    pub fn is_backtrack_free(&self) -> bool {
+        for (sym, rules) in &self.inner {
+            for (idx, lhs) in rules.iter().take(rules.len() - 1).enumerate() {
+                for rhs in &rules[idx + 1..] {
+                    if !rhs.intersection(&**lhs).is_empty() {
+                        dbg!(sym, rhs, lhs);
+                        return false;
+                    }
+                }
+            }
+        }
+        true
     }
 }

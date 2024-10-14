@@ -1,6 +1,6 @@
-use std::ops::{Deref, DerefMut};
+use std::ops::{BitOr, Deref, DerefMut};
 
-use crate::bitset::{self, BitSet};
+use crate::bitset::{self, BitSet, BitSetLike};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
@@ -127,5 +127,13 @@ impl<'a> IntoIterator for &'a SymbolSet {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+impl BitOr for &SymbolSet {
+    type Output = SymbolSet;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        SymbolSet { inner: &self.inner | &rhs.inner } 
     }
 }
