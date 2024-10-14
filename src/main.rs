@@ -29,7 +29,7 @@ fn main() {
     rparen,
     lparen,
     num,
-    name
+    name,
 ] = builder.syms();
     let epsilon = builder.epsilon();
 
@@ -50,9 +50,10 @@ fn main() {
         .is([num])
         .is([name]);
 
-    let grammar = builder.build();
-    let first = grammar.first_set();
-    // dbg!(first);
+    let grammar = builder.build(expr);
+    // let first = grammar.first_sets();
+    let follow = grammar.follow_sets();
+    dbg!(follow);
     // dbg!(grammar.terminals());
     // dbg!(grammar.non_terminals());
     // dbg!(grammar.first_set());

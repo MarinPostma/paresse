@@ -7,31 +7,45 @@ use crate::bitset::{self, BitSet};
 pub struct Symbol(u32);
 
 impl Symbol {
-    pub fn as_u32(&self) -> u32 {
+    pub const fn as_u32(&self) -> u32 {
         self.0
     }
 
-    pub fn epsilon() -> Self {
+    pub const fn epsilon() -> Self {
         Self(0)
     }
 
-    pub fn is_epsilon(&self) -> bool {
+    pub const fn is_epsilon(&self) -> bool {
         self.0 == 0
     }
 
-    pub fn from_u32(u: u32) -> Self {
+    pub const fn eof() -> Self {
+        Self(1)
+    }
+
+    pub const fn is_eof(&self) -> bool {
+        self.0 == 1
+    }
+
+    pub const fn from_u32(u: u32) -> Self {
         Self(u)
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SymbolSource {
     current: u32,
 }
 
+impl Default for SymbolSource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbolSource {
     pub fn new() -> Self {
-        Self::default()
+        Self { current: Symbol::eof().as_u32() }
     }
 }
 

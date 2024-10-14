@@ -1,4 +1,7 @@
-use std::{fmt, ops::BitOrAssign};
+use std::{
+    fmt,
+    ops::{BitOr, BitOrAssign},
+};
 
 type BlockRepr = u128;
 
@@ -50,15 +53,11 @@ impl BitSet {
     }
 
     pub fn remove(&mut self, e: u32) {
-        if self.is_empty() { return }
+        if self.is_empty() {
+            return;
+        }
         let (block, bit) = self.pos(e);
         self.blocks[block] &= !(1 << bit);
-    }
-
-    pub fn contains(&self, e: u32) -> bool {
-        if self.is_empty() { return false }
-        let (block, bit) = self.pos(e);
-        (self.blocks[block] & 1 << bit) != 0
     }
 
     pub fn iter(&self) -> Iter {
@@ -78,6 +77,13 @@ impl BitSet {
         }
 
         Self { blocks }
+    }
+
+    /// remove trailing empty blocks
+    pub fn shrink(&mut self) {
+        while let Some(&0) = self.blocks.last() {
+            self.blocks.pop();
+        }
     }
 }
 
@@ -140,7 +146,156 @@ impl BitOrAssign<&Self> for BitSet {
             self.blocks.push(0);
         }
 
-        self.blocks.iter_mut().zip(rhs.blocks.iter()).for_each(|(s, b)| {*s |= *b})
+        self.blocks
+            .iter_mut()
+            .zip(rhs.blocks.iter())
+            .for_each(|(s, b)| *s |= *b)
+    }
+}
+
+impl<B> BitOr<B> for &BitSet
+where
+    B: BitSetLike,
+{
+    type Output = BitSet;
+
+    fn bitor(self, rhs: B) -> Self::Output {
+        self.union(rhs).collect()
+    }
+}
+
+pub trait BitSetLike {
+    fn block_count(&self) -> usize;
+    fn blocks(&self) -> impl Iterator<Item = BlockRepr>;
+    fn contains(&self, e: u32) -> bool;
+
+    fn collect(&self) -> BitSet {
+        BitSet {
+            blocks: self.blocks().collect(),
+        }
+    }
+
+    fn count(&self) -> usize {
+        self.blocks().map(|b| b.count_ones() as usize).sum()
+    }
+
+    fn is_empty(&self) -> bool {
+        !self.blocks().any(|b| b != 0)
+    }
+
+    fn union<O>(&self, other: O) -> Union<&Self, O>
+    where
+        Self: Sized,
+    {
+        Union::new(self, other)
+    }
+
+    fn intersection<O>(&self, other: O) -> Intersection<&Self, O> {
+        Intersection::new(self, other)
+    }
+}
+
+impl<T: BitSetLike> BitSetLike for &T {
+    fn block_count(&self) -> usize {
+        T::block_count(self)
+    }
+
+    fn blocks(&self) -> impl Iterator<Item = BlockRepr> {
+        T::blocks(self)
+    }
+
+    fn contains(&self, e: u32) -> bool {
+        T::contains(self, e)
+    }
+}
+
+impl BitSetLike for BitSet {
+    fn block_count(&self) -> usize {
+        self.blocks.len()
+    }
+
+    fn blocks(&self) -> impl Iterator<Item = BlockRepr> {
+        self.blocks.iter().copied()
+    }
+
+    fn contains(&self, e: u32) -> bool {
+        if self.is_empty() {
+            return false;
+        }
+        let (block, bit) = self.pos(e);
+        (self.blocks[block] & 1 << bit) != 0
+    }
+}
+
+pub struct Intersection<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<A, B> BitSetLike for Intersection<A, B>
+where
+    A: BitSetLike,
+    B: BitSetLike,
+{
+    fn block_count(&self) -> usize {
+        self.a.block_count().min(self.b.block_count())
+    }
+
+    fn blocks(&self) -> impl Iterator<Item = BlockRepr> {
+        let mut iter_a = self.a.blocks();
+        let mut iter_b = self.b.blocks();
+
+        std::iter::from_fn(move || match dbg!((iter_a.next(), iter_b.next())) {
+            (Some(a), Some(b)) => Some(a & b),
+            _ => None,
+        })
+    }
+
+    fn contains(&self, e: u32) -> bool {
+        self.a.contains(e) && self.b.contains(e)
+    }
+}
+
+impl<A, B> Intersection<A, B> {
+    pub fn new(a: A, b: B) -> Self {
+        Self { a, b }
+    }
+}
+
+pub struct Union<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<A, B> Union<A, B> {
+    fn new(a: A, b: B) -> Self {
+        Self { a, b }
+    }
+}
+
+impl<A, B> BitSetLike for Union<A, B>
+where
+    A: BitSetLike,
+    B: BitSetLike,
+{
+    fn block_count(&self) -> usize {
+        self.a.block_count().max(self.b.block_count())
+    }
+
+    fn blocks(&self) -> impl Iterator<Item = BlockRepr> {
+        let mut iter_a = self.a.blocks();
+        let mut iter_b = self.b.blocks();
+
+        std::iter::from_fn(move || match (iter_a.next(), iter_b.next()) {
+            (Some(a), Some(b)) => Some(a | b),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        })
+    }
+
+    fn contains(&self, e: u32) -> bool {
+        self.a.contains(e) || self.b.contains(e)
     }
 }
 

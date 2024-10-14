@@ -48,8 +48,9 @@ impl Builder {
         unsafe { std::mem::transmute_copy(&out) }
     }
 
-    pub fn build(self) -> Grammar {
+    pub fn build(self, start: Symbol) -> Grammar {
         Grammar {
+            start,
             rules: self.rules,
             symbols: self.symbols,
         }
@@ -103,6 +104,7 @@ impl Terminals {
 }
 
 pub struct Grammar {
+    start: Symbol,
     rules: Vec<Rule>,
     symbols: SymbolSet,
 }
@@ -114,8 +116,8 @@ impl Grammar {
 
     /// Compute the first sets of this grammar, that is, for each rule, the set of symbols that
     /// can appear as the first symbol in a string derived from that rule.
-    pub fn first_set(&self) -> FirstSet {
-        FirstSet::compute(self)
+    pub fn first_sets(&self) -> FirstSets {
+        FirstSets::compute(self)
     }
 
     /// Computes the set of non-terminal symbols of this grammar.
@@ -139,14 +141,83 @@ impl Grammar {
     pub fn symbols(&self) -> &SymbolSet {
         &self.symbols
     }
+
+    pub fn follow_sets(&self) -> FollowSets {
+        FollowSets::compute(self)
+    }
 }
 
 #[derive(Debug)]
-pub struct FirstSet {
+pub struct FollowSets {
     inner: BTreeMap<Symbol, SymbolSet>,
 }
 
-impl FirstSet {
+impl FollowSets {
+    fn compute(grammar: &Grammar) -> Self {
+        let mut follow_sets: BTreeMap<Symbol, SymbolSet>= BTreeMap::new();
+        let first_sets = grammar.first_sets();
+        let non_terminals = grammar.non_terminals();
+
+        for nt in &*non_terminals {
+            follow_sets.insert(nt, Default::default());
+        }
+
+        follow_sets.entry(grammar.start).or_default().add(Symbol::eof());
+
+        let mut changing = true;
+
+        while changing {
+            changing = false;
+            for rule in grammar.rules() {
+                let mut trailer: SymbolSet = follow_sets[&rule.lhs()].clone();
+                for s in rule.rhs().iter().rev() {
+                    let mut first = first_sets.first(*s).clone();
+                    if non_terminals.contains(*s) {
+                        let follow = follow_sets.get_mut(s).unwrap();
+                        let len_before = follow.len();
+                        *follow.deref_mut() |= trailer.deref();
+                        let len_after = follow.len();
+                        changing |= len_before != len_after;
+                        if first.contains_epsilon() {
+                            first.remove_epsilon();
+                            *trailer.deref_mut() |= first.deref();
+                        } else {
+                            trailer = first;
+                        }
+                    } else {
+                        trailer = first;
+                    }
+                }
+            }
+        }
+
+        Self { inner: follow_sets }
+    }
+}
+
+#[derive(Debug)]
+pub struct FirstSets {
+    inner: BTreeMap<Symbol, SymbolSet>,
+}
+
+impl FirstSets {
+    /// Returns the first set for the passed symbol
+    pub fn first(&self, s: Symbol) -> &SymbolSet {
+        self.inner.get(&s).expect("first set for unexisting symbol")
+    }
+
+    /// Returns the first set arising from the concatenation of the passed symbols
+    pub fn first_concat(&self, ss: impl IntoIterator<Item = Symbol>) -> SymbolSet {
+        let mut out = SymbolSet::new();
+        for s in ss {
+            let f = self.first(s);
+            if f.contains_epsilon() { break }
+            *out.deref_mut() |= f.deref();
+        }
+
+        out
+    }
+
     fn compute(grammar: &Grammar) -> Self {
         let mut first_sets: BTreeMap<Symbol, SymbolSet> = BTreeMap::new();
         let terminals = grammar.terminals();
