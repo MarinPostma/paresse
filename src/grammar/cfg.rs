@@ -96,6 +96,12 @@ impl Deref for Terminals {
     }
 }
 
+impl DerefMut for Terminals {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
 impl Terminals {
     fn new(grammar: &Grammar) -> Self {
         let nt = grammar.non_terminals();
@@ -291,12 +297,12 @@ impl FirstSets {
 
 #[derive(Debug)]
 pub struct AugmentedFirstSets {
-    inner: BTreeMap<Symbol, Vec<SymbolSet>>,
+    inner: Vec<SymbolSet>,
 }
 
 impl AugmentedFirstSets {
     fn compute(grammar: &Grammar, first_sets: &FirstSets, follow_sets: &FollowSets) -> Self {
-        let mut inner: BTreeMap<Symbol, Vec<SymbolSet>> = BTreeMap::new();
+        let mut inner = Vec::new();
 
         for rule in grammar.rules() {
             let first = first_sets.first_concat(rule.rhs().iter().copied());
@@ -306,24 +312,28 @@ impl AugmentedFirstSets {
                 first
             };
 
-            inner.entry(rule.lhs()).or_default().push(aug);
+            inner.push(aug);
         }
 
         Self { inner }
     }
 
-    /// Returns whether the grammar is backtrack free
-    pub fn is_backtrack_free(&self) -> bool {
-        for (sym, rules) in &self.inner {
-            for (idx, lhs) in rules.iter().take(rules.len() - 1).enumerate() {
-                for rhs in &rules[idx + 1..] {
-                    if !rhs.intersection(&**lhs).is_empty() {
-                        dbg!(sym, rhs, lhs);
-                        return false;
-                    }
-                }
-            }
-        }
-        true
+    pub fn first_p(&self, rule: usize) -> &SymbolSet {
+        &self.inner[rule]
     }
+
+    // /// Returns whether the grammar is backtrack free
+    // pub fn is_backtrack_free(&self) -> bool {
+    //     for (sym, rules) in &self.inner {
+    //         for (idx, lhs) in rules.iter().take(rules.len() - 1).enumerate() {
+    //             for rhs in &rules[idx + 1..] {
+    //                 if !rhs.intersection(&**lhs).is_empty() {
+    //                     dbg!(sym, rhs, lhs);
+    //                     return false;
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     true
+    // }
 }

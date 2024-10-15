@@ -1,6 +1,5 @@
 use std::{
-    fmt,
-    ops::{BitOr, BitOrAssign},
+    fmt, iter::Copied, ops::{BitOr, BitOrAssign}
 };
 
 type BlockRepr = u128;
@@ -15,6 +14,8 @@ impl fmt::Debug for BitSet {
         f.debug_list().entries(self.iter()).finish()
     }
 }
+
+pub type Iter<'a> = BlocksIter<Copied<std::slice::Iter<'a, BlockRepr>>>;
 
 impl BitSet {
     pub fn new() -> Self {
@@ -60,9 +61,9 @@ impl BitSet {
         self.blocks[block] &= !(1 << bit);
     }
 
-    pub fn iter(&self) -> Iter {
-        Iter::new(self)
-    }
+    // pub fn iter(&self) -> Iter {
+    //     Iter::new(self)
+    // }
 
     pub fn difference(&self, other: &Self) -> Self {
         let mut blocks: Vec<_> = self
@@ -79,6 +80,10 @@ impl BitSet {
         Self { blocks }
     }
 
+    pub fn iter(&self) -> Iter {
+        BlocksIter::new(self.blocks.iter().copied())
+    }
+
     /// remove trailing empty blocks
     pub fn shrink(&mut self) {
         while let Some(&0) = self.blocks.last() {
@@ -87,57 +92,57 @@ impl BitSet {
     }
 }
 
-pub struct Iter<'a> {
-    curr_block_index: usize,
-    curr_block: Option<BlockRepr>,
-    set: &'a BitSet,
-}
-
-impl<'a> Iter<'a> {
-    fn new(set: &'a BitSet) -> Self {
-        Self {
-            curr_block_index: 0,
-            curr_block: None,
-            set,
-        }
-    }
-}
-
-impl<'a> Iterator for Iter<'a> {
-    type Item = u32;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.set.is_empty() {
-            return None;
-        }
-
-        while self.curr_block_index < self.set.blocks() {
-            let curr_block = match self.curr_block {
-                Some(0) => {
-                    self.curr_block = None;
-                    self.curr_block_index += 1;
-                    continue;
-                }
-                Some(ref mut b) => b,
-                None => {
-                    self.curr_block = Some(self.set.blocks[self.curr_block_index]);
-                    continue;
-                }
-            };
-
-            // set all bits to 0 except for LSB
-            let last_bit = (!*curr_block + 1) & *curr_block;
-            // subtract one to set LSB to 0 and all bits before to 1s, and count them
-            let item = (last_bit - 1).count_ones();
-            // unset the LSB from the current block.
-            *curr_block &= !last_bit;
-
-            return Some(self.curr_block_index as u32 * BlockRepr::BITS + item);
-        }
-
-        None
-    }
-}
+// pub struct Iter<'a> {
+//     curr_block_index: usize,
+//     curr_block: Option<BlockRepr>,
+//     set: &'a BitSet,
+// }
+//
+// impl<'a> Iter<'a> {
+//     fn new(set: &'a BitSet) -> Self {
+//         Self {
+//             curr_block_index: 0,
+//             curr_block: None,
+//             set,
+//         }
+//     }
+// }
+//
+// impl<'a> Iterator for Iter<'a> {
+//     type Item = u32;
+//
+//     fn next(&mut self) -> Option<Self::Item> {
+//         if self.set.is_empty() {
+//             return None;
+//         }
+//
+//         while self.curr_block_index < self.set.blocks() {
+//             let curr_block = match self.curr_block {
+//                 Some(0) => {
+//                     self.curr_block = None;
+//                     self.curr_block_index += 1;
+//                     continue;
+//                 }
+//                 Some(ref mut b) => b,
+//                 None => {
+//                     self.curr_block = Some(self.set.blocks[self.curr_block_index]);
+//                     continue;
+//                 }
+//             };
+//
+//             // set all bits to 0 except for LSB
+//             let last_bit = (!*curr_block + 1) & *curr_block;
+//             // subtract one to set LSB to 0 and all bits before to 1s, and count them
+//             let item = (last_bit - 1).count_ones();
+//             // unset the LSB from the current block.
+//             *curr_block &= !last_bit;
+//
+//             return Some(self.curr_block_index as u32 * BlockRepr::BITS + item);
+//         }
+//
+//         None
+//     }
+// }
 
 impl BitOrAssign<&Self> for BitSet {
     fn bitor_assign(&mut self, rhs: &Self) {
@@ -175,6 +180,10 @@ pub trait BitSetLike {
         }
     }
 
+    fn items(&self) -> BlocksIter<impl Iterator<Item = BlockRepr>> {
+        BlocksIter::new(self.blocks())
+    }
+
     fn count(&self) -> usize {
         self.blocks().map(|b| b.count_ones() as usize).sum()
     }
@@ -192,6 +201,56 @@ pub trait BitSetLike {
 
     fn intersection<O>(&self, other: O) -> Intersection<&Self, O> {
         Intersection::new(self, other)
+    }
+}
+
+pub struct BlocksIter<I> {
+    it: I,
+    curr_block_index: usize,
+    curr_block: Option<BlockRepr>,
+}
+
+impl<I> BlocksIter<I>
+    where I: Iterator<Item = BlockRepr>
+{
+    pub fn new(mut it: I) -> Self {
+        let curr_block = it.next(); 
+        Self { it, curr_block_index: 0, curr_block }
+    }
+}
+
+impl<I> Iterator for BlocksIter<I>
+    where I: Iterator<Item = BlockRepr>
+{
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.curr_block.is_none() {
+                match self.it.next() {
+                    Some(b) => {
+                        self.curr_block_index += 1;
+                        self.curr_block = Some(b);
+                    }
+                    None => return None,
+                }
+            }
+
+            let curr_block = self.curr_block.as_mut().unwrap();
+            if *curr_block == 0 {
+                self.curr_block.take();
+                continue
+            }
+
+            // set all bits to 0 except for LSB
+            let last_bit = (!*curr_block + 1) & *curr_block;
+            // subtract one to set LSB to 0 and all bits before to 1s, and count them
+            let item = (last_bit - 1).count_ones();
+            // unset the LSB from the current block.
+            *curr_block &= !last_bit;
+
+            return Some(self.curr_block_index as u32 * BlockRepr::BITS + item);
+        }
     }
 }
 
@@ -333,7 +392,7 @@ mod test {
         bitset.insert(525);
         bitset.insert(2344);
 
-        let values = bitset.iter().collect::<Vec<u32>>();
+        let values = bitset.items().collect::<Vec<u32>>();
         assert_eq!(values, &[12, 17, 525, 2344]);
     }
 
@@ -344,23 +403,23 @@ mod test {
 
         let diff = a.difference(&b);
 
-        let values = diff.iter().collect::<Vec<u32>>();
+        let values = diff.items().collect::<Vec<u32>>();
         assert_eq!(values, &[4, 1700]);
     }
 
     #[test]
     fn remove() {
         let mut b = bitset![1, 42, 666];
-        let values = b.iter().collect::<Vec<u32>>();
+        let values = b.items().collect::<Vec<u32>>();
         assert_eq!(values, &[1, 42, 666]);
 
         b.remove(42);
 
-        let values = b.iter().collect::<Vec<u32>>();
+        let values = b.items().collect::<Vec<u32>>();
         assert_eq!(values, &[1, 666]);
 
         b.remove(666);
-        let values = b.iter().collect::<Vec<u32>>();
+        let values = b.items().collect::<Vec<u32>>();
         assert_eq!(values, &[1]);
     }
 }

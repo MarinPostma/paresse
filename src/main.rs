@@ -1,4 +1,4 @@
-use regex::grammar::cfg::Builder;
+use paresse::grammar::cfg::Builder;
 
 // #[derive(Debug, Clone)]
 // enum Token {
@@ -57,7 +57,6 @@ fn main() {
     let follow = grammar.follow_sets();
     let augmented= grammar.augmented_first_set(&first, &follow);
 
-    dbg!(&augmented);
     dbg!(augmented.is_backtrack_free());
     // dbg!(grammar.terminals());
     // dbg!(grammar.non_terminals());

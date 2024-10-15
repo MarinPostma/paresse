@@ -1,7 +1,7 @@
 use super::cfg::Builder;
 use super::symbol::Symbol;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Rule {
     lhs: Symbol,
     rhs: Vec<Symbol>,
