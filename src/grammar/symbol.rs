@@ -85,7 +85,7 @@ impl SymbolSet {
     }
 
     pub fn difference(&self, other: &Self) -> Self {
-        Self { inner: self.inner.difference(&other.inner) }
+        Self { inner: self.inner.difference(&other.inner).collect() }
     }
 
     pub fn contains(&self, s: Symbol) -> bool {

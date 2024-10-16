@@ -1,12 +1,8 @@
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 
-use crate::bitset::BitSetLike;
-
-use super::{
-    rule::{Rule, RuleBuilder},
-    symbol::{Symbol, SymbolSet, SymbolSource},
-};
+use super::symbol::{Symbol, SymbolSet, SymbolSource};
+use super::rule::{Rule, RuleBuilder};
 
 #[derive(Default, Debug)]
 pub struct Builder {
