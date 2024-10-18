@@ -32,6 +32,15 @@ impl BitSet {
         Self { blocks }
     }
 
+    pub fn max(&self) -> Option<u32> {
+        for (idx, block) in self.blocks.iter().enumerate().rev() {
+            if *block == 0 { continue }
+            let last_bit_offset = BlockRepr::BITS - block.leading_zeros() - 1;
+            return Some(idx as u32 * BlockRepr::BITS + last_bit_offset)
+        }
+        None
+    }
+
     /// Returns whether the bitset is empty
     pub fn is_empty(&self) -> bool {
         self.blocks.is_empty() || self.blocks.iter().all(|b| *b == 0)
