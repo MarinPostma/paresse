@@ -100,7 +100,11 @@ impl BitSet {
 
         let mut idx = 0;
         while let Some(block) = f(self.blocks.get(idx).copied(), other_iter.next()) {
-            self.blocks.insert(idx, block);
+            if idx < self.blocks.len() {
+                self.blocks[idx] = block;
+            } else {
+                self.blocks.push(block);
+            }
             idx += 1;
         }
     }
