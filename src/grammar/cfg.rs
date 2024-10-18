@@ -232,10 +232,10 @@ impl FirstSets {
         let mut out = SymbolSet::new();
         for s in ss {
             let f = self.first(s);
+            *out.deref_mut() |= f.deref();
             if !f.contains_epsilon() {
                 break;
             }
-            *out.deref_mut() |= f.deref();
         }
 
         out
