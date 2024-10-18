@@ -127,6 +127,9 @@ impl BitSetLike for BitSet {
 
 #[macro_export]
 macro_rules! bitset {
+    () => {
+        $crate::bitset::BitSet::new()
+    };
     ($($it:expr),*) => {
         {
             let mut bitset = $crate::bitset::BitSet::new();
