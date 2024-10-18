@@ -189,4 +189,16 @@ mod test {
         let values = b.items().collect::<Vec<u32>>();
         assert_eq!(values, &[1]);
     }
+
+    #[test]
+    fn max() {
+        let mut b = bitset![];
+        assert!(b.max().is_none());
+        b.insert(0);
+        assert_eq!(b.max().unwrap(), 0);
+        b.insert(7);
+        assert_eq!(b.max().unwrap(), 7);
+        b.insert(798);
+        assert_eq!(b.max().unwrap(), 798);
+    }
 }
