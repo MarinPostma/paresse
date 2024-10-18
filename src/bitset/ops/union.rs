@@ -59,3 +59,25 @@ where
         });
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::bitset;
+
+    #[test]
+    fn union() {
+        let a = bitset![1, 3, 7];
+        let b = bitset![122, 4, 999];
+        assert_eq!(&a | &b, bitset![1, 3, 7, 122, 4, 999]);
+    }
+
+    #[test]
+    fn bit_or_assign() {
+        let mut a = bitset![1, 2, 4];
+        let b = bitset![5];
+
+        a |= b;
+
+        assert_eq!(a, bitset![1, 2, 4, 5]);
+    }
+}
