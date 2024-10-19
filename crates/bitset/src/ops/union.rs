@@ -1,7 +1,6 @@
 use std::ops::{BitOr, BitOrAssign};
 
-use crate::bitset::{BitSet, BlockRepr};
-use crate::bitset::bitset_like::BitSetLike;
+use crate::{BitSet, BitSetLike, BlockRepr};
 
 pub struct Union<A, B> {
     a: A,

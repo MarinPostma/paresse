@@ -1,6 +1,6 @@
 use std::fmt::{self, Display, Write};
 
-use crate::either::Either;
+use either::Either;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Unit {

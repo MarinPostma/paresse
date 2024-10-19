@@ -1,0 +1,7 @@
+[package]
+name = "ll1"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+codegen = { path = "../../crates/codegen/" }

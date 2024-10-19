@@ -1,6 +1,6 @@
 use std::ops::BitAnd;
 
-use crate::bitset::{bitset_like::BitSetLike, BitSet, BlockRepr};
+use crate::{BitSet, BitSetLike, BlockRepr};
 
 pub struct Intersection<A, B> {
     a: A,

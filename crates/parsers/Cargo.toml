@@ -1,0 +1,8 @@
+[package]
+name = "parsers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+grammar = { path = "../grammar"}
+bitset = { path = "../bitset" }

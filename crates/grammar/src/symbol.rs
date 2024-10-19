@@ -1,6 +1,6 @@
 use std::ops::{BitOr, Deref, DerefMut};
 
-use crate::bitset::{self, BitSet, BitSetLike};
+use bitset::{BitSet, BitSetLike as _};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]

@@ -1,6 +1,12 @@
-[package]
-name = "paresse"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
+[workspace]
+resolver = "2"
+members = [
+    "crates/bitset", "crates/codegen",
+    "crates/either",
+    "crates/grammar",
+    "crates/lexer",
+    "crates/parsers", 
+]
+exclude = [
+    "examples/ll1",
+]

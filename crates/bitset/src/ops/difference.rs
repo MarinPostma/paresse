@@ -1,6 +1,6 @@
 use std::ops::Sub;
 
-use crate::bitset::{BitSet, BitSetLike};
+use crate::{BitSet, BitSetLike, BlockRepr};
 
 pub struct Difference<A, B> {
     a: A,
@@ -16,7 +16,7 @@ impl<A, B> Difference<A, B> {
 impl<A, B> BitSetLike for Difference<A, B>
     where A: BitSetLike, B: BitSetLike
 {
-    fn blocks(&self) -> impl Iterator<Item = crate::bitset::BlockRepr> {
+    fn blocks(&self) -> impl Iterator<Item = BlockRepr> {
         let mut a_blocks = self.a.blocks();
         let mut b_blocks = self.b.blocks();
 

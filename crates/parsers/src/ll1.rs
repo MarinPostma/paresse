@@ -1,10 +1,10 @@
 use core::fmt;
 use std::marker::PhantomData;
 
-use crate::bitset::BitSetLike;
-use crate::grammar::symbol::Symbol;
-use crate::grammar::rule::Rule;
-use crate::grammar::cfg::{AugmentedFirstSets, Grammar, NonTerminals, Terminals};
+use grammar::symbol::Symbol;
+use grammar::rule::Rule;
+use grammar::cfg::{AugmentedFirstSets, Grammar, NonTerminals, Terminals};
+use bitset::BitSetLike;
 
 struct ParseTable {
     trans: Vec<u32>,
