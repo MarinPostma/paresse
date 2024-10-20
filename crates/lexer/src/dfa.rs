@@ -28,6 +28,7 @@ impl TransitionTable {
         self.tt[from + offset] = to as u32;
     }
 
+    #[allow(dead_code)]
     fn states(&self) -> impl Iterator<Item = StateId> {
         let mut current = 0;
         let stride = self.stride;
@@ -42,18 +43,22 @@ impl TransitionTable {
         })
     }
 
+    #[allow(dead_code)]
     fn state_id_to_usize(&self, state_id: StateId) -> usize {
         state_id / self.stride
     }
 
+    #[allow(dead_code)]
     fn usize_to_state_id(&self, i: usize) -> StateId {
         i * self.stride
     }
 
+    #[allow(dead_code)]
     fn state_count(&self) -> usize {
         self.tt.len() / self.stride
     }
 
+    #[allow(dead_code)]
     fn translate(&self, to: &Self, id: StateId) -> StateId {
         assert_eq!(self.state_count(), to.state_count());
         to.usize_to_state_id(self.state_id_to_usize(id))
@@ -93,6 +98,8 @@ impl DFA {
 
     /// Minimizes the alphabet size for that alphabet by mapping characters that always map to the
     /// same state transisions to the same char classes
+    /// Buggy: fix
+    #[allow(dead_code)]
     pub fn minimize_aplhabet(&self) -> DFA {
         let mut state_map = HashMap::new();
         let mut class_map: Box<[u8; 256]> = Box::new([0; 256]);

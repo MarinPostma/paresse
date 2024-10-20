@@ -1,5 +1,4 @@
 #![allow(clippy::upper_case_acronyms)]
-use std::marker::PhantomData;
 
 use alphabet::Unit;
 use dfa::DFA;
@@ -11,10 +10,6 @@ mod ast;
 mod dfa;
 mod nfa;
 mod parser;
-
-pub enum ScanError {
-    Skip,
-}
 
 #[derive(Debug)]
 pub struct Span<'a> {
@@ -37,61 +32,18 @@ impl<'a> Span<'a> {
     }
 }
 
-pub trait Emitter {
-    type Token: 'static;
-    fn emit(&self, span: Span) -> Result<Self::Token, ScanError>;
-}
-
-struct Skip<T>(PhantomData<T>);
-
-impl<T> Skip<T> {
-    fn new() -> Self {
-        Self(PhantomData)
-    }
-}
-
-struct Keyword<T>(T);
-
-impl<T: Clone + 'static> Emitter for Keyword<T> {
-    type Token = T;
-
-    fn emit(&self, _: Span) -> Result<Self::Token, ScanError> {
-        Ok(self.0.clone())
-    }
-}
-
-impl<T: 'static> Emitter for Skip<T> {
-    type Token = T;
-
-    fn emit(&self, _: Span) -> Result<Self::Token, ScanError> {
-        Err(ScanError::Skip)
-    }
-}
-
-impl<T, F> Emitter for F
-where
-    F: for<'a> Fn(Span<'a>) -> Result<T, ScanError>,
-    T: 'static,
-{
-    type Token = T;
-
-    fn emit(&self, span: Span) -> Result<Self::Token, ScanError> {
-        self(span)
-    }
-}
-
 pub struct ScannerBuilder<T> {
     builder: Builder,
-    matchers: Vec<Box<dyn Emitter<Token = T>>>,
+    matchers: Vec<T>,
 }
 
-impl<T: 'static> Default for ScannerBuilder<T> {
+impl<T: 'static + Clone> Default for ScannerBuilder<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: 'static> ScannerBuilder<T> {
+impl<T: 'static + Clone> ScannerBuilder<T> {
     pub fn new() -> Self {
         let mut builder = Builder::default();
         builder.push(nfa::State::Split {
@@ -103,34 +55,20 @@ impl<T: 'static> ScannerBuilder<T> {
         }
     }
 
-    pub fn keyword(self, pat: &str, t: T) -> Self
-    where
-        T: Clone,
-    {
-        self.token(pat, Keyword(t))
+    pub fn token(&mut self, pat: &str, t: T) -> &mut Self {
+        self.token_with_flags(pat, Flags::default(), t)
     }
 
-    pub fn keyword_insensitive(self, pat: &str, t: T) -> Self
-    where
-        T: Clone,
-    {
-        self.token_insensitive(pat, Keyword(t))
-    }
-
-    pub fn token(self, pat: &str, m: impl Emitter<Token = T> + 'static) -> Self {
-        self.token_with_flags(pat, Flags::default(), m)
-    }
-
-    pub fn token_insensitive(self, pat: &str, m: impl Emitter<Token = T> + 'static) -> Self {
-        self.token_with_flags(pat, Flags::default().set_case_insensitive(true), m)
+    pub fn token_insensitive(&mut self, pat: &str, t: T) -> &mut Self {
+        self.token_with_flags(pat, Flags::default().set_case_insensitive(true), t)
     }
 
     fn token_with_flags(
-        mut self,
+        &mut self,
         pat: &str,
         flags: Flags,
-        m: impl Emitter<Token = T> + 'static,
-    ) -> Self {
+        token_kind: T,
+    ) -> &mut Self {
         let config = Config::default().set_flags(flags);
         let parser = parser::Parser::new(config);
         let ast = parser.parse(pat);
@@ -143,13 +81,9 @@ impl<T: 'static> ScannerBuilder<T> {
         });
         self.builder.state_mut(end);
         self.add_token_state(new_start);
-        self.matchers.push(Box::new(m));
+        self.matchers.push(token_kind);
 
         self
-    }
-
-    pub fn skip(self, pat: &str) -> Self {
-        self.token(pat, Skip::new())
     }
 
     fn add_token_state(&mut self, state: StateId) {
@@ -162,8 +96,8 @@ impl<T: 'static> ScannerBuilder<T> {
     pub fn build(self) -> Scanner<T> {
         let nfa = self.builder.build(0);
         let dfa = dfa::Builder::new(&nfa).build();
-        let dfa = dfa.minimize_aplhabet();
-        println!("{dfa}");
+        // let dfa = dfa.minimize_aplhabet(); BUGGY
+
         Scanner {
             dfa,
             matchers: self.matchers,
@@ -173,27 +107,43 @@ impl<T: 'static> ScannerBuilder<T> {
 
 pub struct Scanner<T> {
     dfa: DFA,
-    matchers: Vec<Box<dyn Emitter<Token = T>>>,
+    matchers: Vec<T>,
 }
 
-impl<T: 'static> Scanner<T> {
+impl<T: Clone + 'static> Scanner<T> {
     pub fn scan<'a, 'b>(&'a self, input: &'b str) -> Scan<'a, 'b, T> {
         // println!("{}", self.dfa);
         Scan::new(self, input)
     }
 }
 
-pub struct Scan<'a, 'b, T> {
-    scanner: &'a Scanner<T>,
-    input: &'b str,
+pub struct Scan<'scanner, 'input, T> {
+    scanner: &'scanner Scanner<T>,
+    input: &'input str,
     start: usize,
     match_info: (StateId, usize),
     sp: usize,
     state: StateId,
 }
 
-impl<'a, 'b, T: 'static> Iterator for Scan<'a, 'b, T> {
-    type Item = T;
+#[derive(Debug)]
+pub struct Spanned<'input, T> {
+    kind: T,
+    span: Span<'input>,
+}
+
+impl<'input, T> Spanned<'input, T> {
+    pub fn kind(&self) -> &T {
+        &self.kind
+    }
+
+    pub fn span(&self) -> &Span<'input> {
+        &self.span
+    }
+}
+
+impl<'scanner, 'input, T: Clone + 'static> Iterator for Scan<'scanner, 'input, T> {
+    type Item = Spanned<'input, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.input.is_empty() {
@@ -212,12 +162,7 @@ impl<'a, 'b, T: 'static> Iterator for Scan<'a, 'b, T> {
                         self.match_info = (self.sp, id);
                     }
                 }
-                None if self.has_match() => match self.cut_match() {
-                    Ok(token) => return Some(token),
-                    Err(ScanError::Skip) => {
-                        self.reset();
-                    }
-                },
+                None if self.has_match() => return Some(self.cut_match()),
                 None => {
                     panic!();
                 }
@@ -225,18 +170,15 @@ impl<'a, 'b, T: 'static> Iterator for Scan<'a, 'b, T> {
         }
 
         if self.has_match() {
-            match self.cut_match() {
-                Ok(token) => Some(token),
-                Err(ScanError::Skip) => None,
-            }
+            Some(self.cut_match())
         } else {
             None
         }
     }
 }
 
-impl<'a, 'b, T: 'static> Scan<'a, 'b, T> {
-    fn new(scanner: &'a Scanner<T>, input: &'b str) -> Self {
+impl<'scanner, 'input, T: Clone + 'static> Scan<'scanner, 'input, T> {
+    fn new(scanner: &'scanner Scanner<T>, input: &'input str) -> Self {
         Self {
             scanner,
             input,
@@ -262,7 +204,7 @@ impl<'a, 'b, T: 'static> Scan<'a, 'b, T> {
         self.match_info.0 != 0
     }
 
-    fn cut_match(&mut self) -> Result<T, ScanError> {
+    fn cut_match(&mut self) -> Spanned<'input, T> {
         let (token, rest) = self.input.split_at(self.match_info.0);
         self.input = rest;
         let span = Span {
@@ -271,6 +213,7 @@ impl<'a, 'b, T: 'static> Scan<'a, 'b, T> {
             input: token,
         };
         self.start = self.match_info.0;
-        self.scanner.matchers[self.match_info.1].emit(span)
+        let kind = self.scanner.matchers[self.match_info.1].clone();
+        Spanned { kind, span }
     }
 }

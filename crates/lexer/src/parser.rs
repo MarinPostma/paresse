@@ -58,8 +58,8 @@ impl Parser {
         Self { config }
     }
 
-    pub(crate) fn parse(&self, s: &str) -> RegexAst {
-        let mut tokens = s.as_bytes().iter().copied().peekable();
+    pub(crate) fn parse(&self, pat: &str) -> RegexAst {
+        let mut tokens = pat.as_bytes().iter().copied().peekable();
         self.parse_regex(&mut tokens).unwrap()
     }
 

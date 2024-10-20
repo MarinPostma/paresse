@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::{Deref, DerefMut};
 
 use super::symbol::{Symbol, SymbolSet, SymbolSource};
@@ -46,7 +46,35 @@ impl Builder {
         unsafe { std::mem::transmute_copy(&out) }
     }
 
-    pub fn build(self, start: Symbol) -> Grammar {
+    fn find_start(&self) -> Symbol {
+        let mut nts = self
+            .rules
+            .iter()
+            .map(|r| (r.lhs(), 0))
+            .collect::<HashMap<_, _>>();
+
+        for rule in &self.rules {
+            for s in rule.rhs() {
+                if let Some(cnt) = nts.get_mut(s) {
+                    *cnt += 1;
+                }
+            }
+        }
+
+        let candidates: Vec<Symbol> = nts
+            .into_iter()
+            .filter_map(|(s, c)| if c == 0 { Some(s)} else { None })
+            .collect();
+
+        if candidates.len() == 1 {
+            candidates[0]
+        } else {
+            panic!("multiple start symbol candidates")
+        }
+    }
+
+    pub fn build(self) -> Grammar {
+        let start = self.find_start();
         Grammar {
             start,
             rules: self.rules,

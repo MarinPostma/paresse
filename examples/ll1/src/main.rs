@@ -1,5 +1,5 @@
 codegen::parser_ll1! {
-    Num = "(" <n:"[0-9]+"> ")" => {
+    Num = "\\(" <n:"[0-9]+"> "\\)" => {
         n.parse::<u64>().unwrap()
     }
     Expr = {
