@@ -98,7 +98,13 @@ pub struct Grammar {
     rules: Vec<Rule>,
     grammar: grammar::cfg::Grammar,
     /// maps rule name to rule id
-    non_terminal_mapper: HashMap<Ident, grammar::symbol::Symbol>,
+    non_terminal_mapper: HashMap<Ident, SymbolId>,
     /// maps terminal pattern to id
-    terminal_mapper: HashMap<String, grammar::symbol::Symbol>,
+    terminal_mapper: HashMap<String, SymbolId>,
+}
+
+impl Grammar {
+    pub fn terminal_mapper(&self) -> &HashMap<String, SymbolId> {
+        &self.terminal_mapper
+    }
 }

@@ -3,7 +3,7 @@ use core::fmt;
 use quote::ToTokens;
 use syn::{
     braced,
-    parse::{Lookahead1, Parse},
+    parse::Parse,
     token::Brace,
     Expr, Ident, LitStr, Token,
 };
@@ -100,7 +100,7 @@ impl Parse for Rhs {
 
         loop {
             let lookahead = input.lookahead1();
-            if lookahead.peek(LitStr) || lookahead.peek(Token![<]) {
+            if lookahead.peek(LitStr) || lookahead.peek(Token![<]) || lookahead.peek(Ident) {
                 let sym: Symbol = input.parse()?;
                 syms.push(sym);
             } else {
@@ -170,6 +170,8 @@ fn parse_rule(input: syn::parse::ParseStream, rules: &mut Vec<Rule>) -> syn::Res
             rhs: input.parse()?,
         });
     }
+
+    input.parse::<Token![;]>()?;
 
     Ok(())
 }

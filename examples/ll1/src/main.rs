@@ -1,12 +1,35 @@
 codegen::parser_ll1! {
-    Num = "\\(" <n:"[0-9]+"> "\\)" => {
-        n.parse::<u64>().unwrap()
-    }
-    Expr = {
-        <n:Num> => say_hello(),
-        "struct" => its_a_struct(),
-    }
+    Json = Element;
+    Value = {
+        Object,
+        Array,
+        String,
+        Number,
+        "true",
+        "false",
+    };
+    Object = {
+        "{" Ws "}",
+        "{" Members "}",
+    };
+    Members = Ws String Ws ":" Element;
+    Array = {
+        "\\[" Ws "\\]",
+        "\\[" Elements "\\]",
+    };
+    Elements = {
+        Element,
+        Element "," Elements,
+    };
+    Element = Ws Value Ws;
+    String = "\"[^\"]*\"";
+    Number = "[0-9]+";
 }
 
 fn main() {
+    let s = Scan::new(r#"{"hello": 12, "bool": true}"#);
+    
+    for s in s {
+        dbg!(s);
+    }
 }

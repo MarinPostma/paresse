@@ -73,8 +73,12 @@ pub struct DFA {
 }
 
 impl DFA {
-    pub(crate) fn initial(&self) -> StateId {
+    pub fn initial(&self) -> StateId {
         self.initial
+    }
+
+    pub fn match_states(&self) -> &HashMap<StateId, usize> {
+        &self.match_states
     }
 
     #[allow(dead_code)]
@@ -86,7 +90,7 @@ impl DFA {
         self.match_states.get(&state).copied()
     }
 
-    pub(crate) fn transition(&self, from: StateId, u: Unit) -> Option<StateId> {
+    pub fn transition(&self, from: StateId, u: Unit) -> Option<StateId> {
         let offset = self.class_map.offset(u)?;
         let id = self.transitions.tt[from + offset];
         if id == 0 {
@@ -170,6 +174,10 @@ impl DFA {
                 class_count: state_map.len(),
             },
         }
+    }
+
+    pub fn states_iter(&self) -> impl Iterator<Item = StateId> {
+        self.transitions.states()
     }
 }
 

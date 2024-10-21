@@ -8,6 +8,7 @@ quote = "1.0.37"
 syn = { version = "2.0.79", features = ["parsing", "printing"] }
 lexer = { path = "../lexer/" }
 grammar = { path = "../grammar/" }
+proc-macro2 = "1.0.88"
 
 [lib]
 proc-macro = true

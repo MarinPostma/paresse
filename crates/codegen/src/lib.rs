@@ -1,9 +1,11 @@
 use proc_macro::TokenStream;
 use parse::ParsedGrammar;
+use quote::ToTokens;
 use syn::parse_macro_input;
 
 mod parse;
 mod grammar;
+mod generate;
 
 #[proc_macro]
 pub fn parser_ll1(input: TokenStream) -> TokenStream {
@@ -13,8 +15,11 @@ pub fn parser_ll1(input: TokenStream) -> TokenStream {
         hook(info)
     }));
 
-    let raw_grammar = parse_macro_input!(input as ParsedGrammar);
-    crate::grammar::GrammarBuilder::new(&raw_grammar).build();
+    let parsed = parse_macro_input!(input as ParsedGrammar);
+    let grammar = crate::grammar::GrammarBuilder::new(&parsed).build();
+    let lexer = generate::lexer::LexerGenerator::new(&grammar).generate();
 
-    todo!()
+    quote::quote! {
+        #lexer
+    }.into_token_stream().into()
 }

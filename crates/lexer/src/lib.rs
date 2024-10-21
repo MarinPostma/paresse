@@ -1,6 +1,5 @@
 #![allow(clippy::upper_case_acronyms)]
 
-use alphabet::Unit;
 use dfa::DFA;
 use nfa::{Builder, State, StateId};
 use parser::{Config, Flags};
@@ -10,6 +9,8 @@ mod ast;
 mod dfa;
 mod nfa;
 mod parser;
+
+pub use alphabet::Unit;
 
 #[derive(Debug)]
 pub struct Span<'a> {
@@ -114,6 +115,14 @@ impl<T: Clone + 'static> Scanner<T> {
     pub fn scan<'a, 'b>(&'a self, input: &'b str) -> Scan<'a, 'b, T> {
         // println!("{}", self.dfa);
         Scan::new(self, input)
+    }
+
+    pub fn dfa(&self) -> &DFA {
+        &self.dfa
+    }
+
+    pub fn matches(&self) -> &[T] {
+        &self.matchers
     }
 }
 

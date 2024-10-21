@@ -9,13 +9,26 @@ pub enum Unit {
     Byte(u8),
 }
 
+impl Unit {
+    pub fn all() -> impl Iterator<Item = Self> {
+        let mut current = Self::Boi;
+        std::iter::from_fn(move || {
+            let next = current;
+            current = match next {
+                Unit::Boi => Unit::Eoi,
+                Unit::Eoi => Unit::Byte(0),
+                Unit::Byte(n) if n < u8::MAX => Unit::Byte(n + 1),
+                _ => return None,
+            };
+
+            Some(next)
+        })
+    }
+}
+
 impl fmt::Debug for Unit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Boi => write!(f, "Boi"),
-            Self::Eoi => write!(f, "Eoi"),
-            Self::Byte(c) => f.write_char(*c as char),
-        }
+        write!(f, "{self}")
     }
 }
 
