@@ -236,8 +236,14 @@ impl LexerGenerator {
         let dfa = self.scanner.dfa();
         let match_arms = dfa.match_states()
             .iter()
-            .map(|(&s_id, &m_id)| {
-                let s = self.scanner.matches()[m_id].as_u32();
+            .map(|(&s_id, m_ids)| {
+                let s = m_ids
+                    .iter()
+                    .map(|id| self.scanner.matches()[*id])
+                    .max_by_key(|m| m.1)
+                    .unwrap()
+                    .0
+                    .as_u32();
                 let state = state_ident(s_id);
                 quote!{ __State::#state => Some(#s) }
             });

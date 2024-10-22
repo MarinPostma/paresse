@@ -68,7 +68,7 @@ impl TransitionTable {
 pub struct DFA {
     initial: StateId,
     transitions: TransitionTable,
-    match_states: HashMap<StateId, usize>,
+    match_states: HashMap<StateId, Vec<usize>>,
     class_map: ClassMap,
 }
 
@@ -77,7 +77,7 @@ impl DFA {
         self.initial
     }
 
-    pub fn match_states(&self) -> &HashMap<StateId, usize> {
+    pub fn match_states(&self) -> &HashMap<StateId, Vec<usize>> {
         &self.match_states
     }
 
@@ -86,8 +86,8 @@ impl DFA {
         s / self.transitions.stride
     }
 
-    pub(crate) fn matches(&self, state: StateId) -> Option<usize> {
-        self.match_states.get(&state).copied()
+    pub(crate) fn matches(&self, state: StateId) -> Option<&[usize]> {
+        self.match_states.get(&state).map(|v| &**v)
     }
 
     pub fn transition(&self, from: StateId, u: Unit) -> Option<StateId> {
@@ -162,7 +162,7 @@ impl DFA {
         let match_states = self
             .match_states
             .iter()
-            .map(|(s, m)| (self.transitions.translate(&tt, *s), *m))
+            .map(|(s, m)| (self.transitions.translate(&tt, *s), m.clone()))
             .collect();
 
         DFA {
@@ -222,7 +222,7 @@ impl fmt::Display for DFA {
 pub struct Builder<'a> {
     tt: TransitionTable,
     nfa: &'a NFA,
-    match_states: HashMap<StateId, usize>,
+    match_states: HashMap<StateId, Vec<usize>>,
     class_map: ClassMap,
 }
 
@@ -257,8 +257,12 @@ impl<'a> Builder<'a> {
                     Some(&id) => id,
                     None => {
                         let id = self.tt.new_state();
-                        if let Some(match_id) = q.iter().find_map(|s| self.nfa.is_match(*s)) {
-                            self.match_states.insert(id, match_id);
+                        let match_ids = q
+                            .iter()
+                            .filter_map(|s| self.nfa.is_match(*s))
+                            .collect::<Vec<_>>();
+                        if !match_ids.is_empty() {
+                            self.match_states.insert(id, match_ids);
                         }
                         dstates.insert(q.clone(), id);
                         workset.push((id, q));

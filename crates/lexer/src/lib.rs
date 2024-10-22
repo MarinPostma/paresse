@@ -35,7 +35,8 @@ impl<'a> Span<'a> {
 
 pub struct ScannerBuilder<T> {
     builder: Builder,
-    matchers: Vec<T>,
+    /// Matching token, with the associated priority
+    matchers: Vec<(T, u32)>,
 }
 
 impl<T: 'static + Clone> Default for ScannerBuilder<T> {
@@ -82,7 +83,7 @@ impl<T: 'static + Clone> ScannerBuilder<T> {
         });
         self.builder.state_mut(end);
         self.add_token_state(new_start);
-        self.matchers.push(token_kind);
+        self.matchers.push((token_kind, ast.priority()));
 
         self
     }
@@ -108,7 +109,7 @@ impl<T: 'static + Clone> ScannerBuilder<T> {
 
 pub struct Scanner<T> {
     dfa: DFA,
-    matchers: Vec<T>,
+    matchers: Vec<(T, u32)>,
 }
 
 impl<T: Clone + 'static> Scanner<T> {
@@ -121,7 +122,7 @@ impl<T: Clone + 'static> Scanner<T> {
         &self.dfa
     }
 
-    pub fn matches(&self) -> &[T] {
+    pub fn matches(&self) -> &[(T, u32)] {
         &self.matchers
     }
 }
@@ -167,8 +168,9 @@ impl<'scanner, 'input, T: Clone + 'static> Iterator for Scan<'scanner, 'input, T
                     self.state = new_state;
                     self.sp += 1;
 
-                    if let Some(id) = dfa.matches(new_state) {
-                        self.match_info = (self.sp, id);
+                    if let Some(matches) = dfa.matches(new_state) {
+                        let id = matches.iter().max_by_key(|i| self.scanner.matchers[**i].1).unwrap();
+                        self.match_info = (self.sp, *id);
                     }
                 }
                 None if self.has_match() => return Some(self.cut_match()),
@@ -222,7 +224,7 @@ impl<'scanner, 'input, T: Clone + 'static> Scan<'scanner, 'input, T> {
             input: token,
         };
         self.start = self.match_info.0;
-        let kind = self.scanner.matchers[self.match_info.1].clone();
+        let kind = self.scanner.matchers[self.match_info.1].0.clone();
         Spanned { kind, span }
     }
 }
