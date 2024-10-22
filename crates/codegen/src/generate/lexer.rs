@@ -8,14 +8,15 @@ use crate::grammar::Grammar;
 use grammar::symbol::Symbol as SymbolId;
 use lexer::Unit;
 
-pub struct LexerGenerator {
+pub struct LexerGenerator<'g> {
     scanner: Scanner<SymbolId>,
+    grammar: &'g Grammar,
 }
 
-impl LexerGenerator {
-    pub fn new(grammar: &Grammar) -> Self {
+impl<'g> LexerGenerator<'g> {
+    pub fn new(grammar: &'g Grammar) -> Self {
         let scanner = build_scanner(grammar);
-        Self { scanner }
+        Self { scanner, grammar }
     }
 
     pub fn generate(&self) -> impl ToTokens {
@@ -23,10 +24,13 @@ impl LexerGenerator {
         let transition_fn = self.generate_transition_fn();
         let match_states_fn = self.generate_match_states_fn();
         let start_state = self.start_state();
+        let spanned = self.gen_spanned();
 
         quote! {
             use std::fmt::Write;
             #state_enum
+
+            #spanned
 
             #[derive(Copy, Clone, PartialEq, Eq, Hash)]
             pub enum Unit {
@@ -51,19 +55,6 @@ impl LexerGenerator {
                 }
             }
 
-            #[derive(Debug)]
-            pub struct Span<'a> {
-                start: usize,
-                end: usize,
-                input: &'a str,
-            }
-
-            #[derive(Debug)]
-            pub struct Spanned<'a> {
-                kind: u32,
-                span: Span<'a>,
-            }
-
             struct Scan<'a> {
                 input: &'a str,
                 start: usize,
@@ -76,7 +67,13 @@ impl LexerGenerator {
                 type Item = Spanned<'a>;
 
                 fn next(&mut self) -> Option<Self::Item> {
-                    self.next_token()
+                    loop {
+                        match self.next_token() {
+                            Some(t) if t.kind == u32::MAX => continue,
+                            Some(t) => return Some(t),
+                            None => return None,
+                        }
+                    }
                 }
             }
 
@@ -143,14 +140,14 @@ impl LexerGenerator {
                 fn cut_match(&mut self) -> Spanned<'a> {
                     let (token, rest) = self.input.split_at(self.match_info.0);
                     self.input = rest;
-                    let span = Span {
-                        start: self.start,
-                        end: self.start + self.match_info.0,
-                        input: token,
-                    };
                     self.start += self.match_info.0;
                     let kind = self.match_info.1;
-                    Spanned { kind, span }
+                    Spanned { 
+                        kind,
+                        start: self.start,
+                        end: self.start + self.match_info.0,
+                        token,
+                    }
                 }
             }
         }
@@ -253,6 +250,40 @@ impl LexerGenerator {
                 match state {
                     #(#match_arms,)*
                     _ => None,
+                }
+            }
+        }
+    }
+
+    fn gen_spanned(&self) -> impl ToTokens {
+        let arms = self.grammar.terminal_mapper().iter().map(|(pat, sym)| {
+            let s = sym.as_u32();
+            let p = pat.as_str();
+            quote! { #s =>  #p }
+        });
+
+        quote! {
+            pub struct Spanned<'a> {
+                kind: u32,
+                start: usize,
+                end: usize,
+                token: &'a str,
+            }
+
+            impl<'a> std::fmt::Debug for Spanned<'a> {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    let pat = match self.kind {
+                        #(#arms,)*
+                        _ => unreachable!(),
+                    };
+
+                    f.debug_struct("Spanned")
+                        .field("start", &self.start)
+                        .field("end", &self.end)
+                        .field("token", &self.token)
+                        .field("kind", &pat)
+                        .finish()
+
                 }
             }
         }

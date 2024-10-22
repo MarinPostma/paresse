@@ -5,7 +5,7 @@ codegen::parser_ll1! {
 }
 
 fn main() {
-    let s = Scan::new(r#"foobar"#);
+    let s = Scan::new(r#"foobato foo f foobar"#);
     
     for s in s {
         dbg!(s);
