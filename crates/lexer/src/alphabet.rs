@@ -70,6 +70,10 @@ impl ByteSet {
     pub(crate) fn iter(&self) -> ByteSetIter {
         ByteSetIter::new(self)
     }
+
+    pub(crate) fn len(&self) -> u32 {
+        self.0[0].count_ones() + self.0[1].count_ones()
+    }
 }
 
 pub(crate) struct ByteSetIter<'a> {

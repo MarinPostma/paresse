@@ -13,6 +13,18 @@ impl RegexAst {
     pub(crate) fn to_nfa(&self, builder: &mut Builder, match_id: usize) -> (StateId, StateId) {
         build_nfa_from_ast(self, builder, match_id)
     }
+
+    fn priority(&self) -> u32 {
+        match self {
+            RegexAst::Match(Class::Boi | Class::Eoi) => 2,
+            RegexAst::Match(Class::Chars(set)) if set.len() == 1 => 2,
+            RegexAst::Match(Class::Chars(_)) => 1,
+            RegexAst::Kleene(e) => e.priority(),
+            RegexAst::Alt(lhs, rhs) => lhs.priority().min(rhs.priority()),
+            RegexAst::Concat(lhs, rhs) => lhs.priority() + rhs.priority(),
+        }
+
+    }
 }
 
 fn build_nfa_from_ast(

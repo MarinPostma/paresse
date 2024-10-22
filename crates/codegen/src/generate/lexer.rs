@@ -25,6 +25,7 @@ impl LexerGenerator {
         let start_state = self.start_state();
 
         quote! {
+            use std::fmt::Write;
             #state_enum
 
             #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -40,16 +41,15 @@ impl LexerGenerator {
                 }
             }
 
-            use std::fmt::Write;
-impl std::fmt::Display for Unit {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Unit::Boi => f.write_str("BOI"),
-            Unit::Eoi => f.write_str("EOI"),
-            Unit::Byte(c) => f.write_char(*c as char),
-        }
-    }
-}
+            impl std::fmt::Display for Unit {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    match self {
+                        Unit::Boi => f.write_str("BOI"),
+                        Unit::Eoi => f.write_str("EOI"),
+                        Unit::Byte(c) => f.write_char(*c as char),
+                    }
+                }
+            }
 
             #[derive(Debug)]
             pub struct Span<'a> {
@@ -264,7 +264,8 @@ fn build_scanner(grammar: &Grammar) -> Scanner<SymbolId> {
         builder.token(pat, sym);
     }
 
-    builder.token("[ \n\t]", SymbolId::from_u32(u32::MAX));
+    // TODO: take whitespaces as a param to the parser
+    builder.token("[ \n\t]+", SymbolId::from_u32(u32::MAX));
 
     builder.build()
 }
