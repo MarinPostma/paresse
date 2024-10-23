@@ -10,6 +10,7 @@ version = "0.1.0"
 name = "codegen"
 version = "0.1.0"
 dependencies = [
+ "bitset",
  "grammar",
  "lexer",
  "proc-macro2",

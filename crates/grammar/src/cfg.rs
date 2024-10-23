@@ -186,6 +186,11 @@ impl Grammar {
     ) -> AugmentedFirstSets {
         AugmentedFirstSets::compute(self, first_sets, follow_sets)
     }
+
+    /// Returns the start symbol of that grammar
+    pub fn start(&self) -> Symbol {
+        self.start
+    }
 }
 
 #[derive(Debug)]

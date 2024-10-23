@@ -4,22 +4,28 @@ use lexer::{Scanner, ScannerBuilder};
 use quote::{format_ident, quote, ToTokens};
 use syn::Ident;
 
-use crate::grammar::Grammar;
+use crate::hir::GrammarHir;
 use grammar::symbol::Symbol as SymbolId;
 use lexer::Unit;
 
 pub struct LexerGenerator<'g> {
     scanner: Scanner<SymbolId>,
-    grammar: &'g Grammar,
+    grammar: &'g GrammarHir,
+}
+
+impl<'g> ToTokens for LexerGenerator<'g> {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        self.generate().to_tokens(tokens)
+    }
 }
 
 impl<'g> LexerGenerator<'g> {
-    pub fn new(grammar: &'g Grammar) -> Self {
+    pub fn new(grammar: &'g GrammarHir) -> Self {
         let scanner = build_scanner(grammar);
         Self { scanner, grammar }
     }
 
-    pub fn generate(&self) -> impl ToTokens {
+    fn generate(&self) -> impl ToTokens {
         let state_enum = self.generate_state_enum();
         let transition_fn = self.generate_transition_fn();
         let match_states_fn = self.generate_match_states_fn();
@@ -33,7 +39,7 @@ impl<'g> LexerGenerator<'g> {
             #spanned
 
             #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-            pub enum Unit {
+            enum Unit {
                 Boi,
                 Eoi,
                 Byte(u8),
@@ -294,7 +300,7 @@ fn state_ident(id: usize) -> Ident {
     format_ident!("S{id}")
 }
 
-fn build_scanner(grammar: &Grammar) -> Scanner<SymbolId> {
+fn build_scanner(grammar: &GrammarHir) -> Scanner<SymbolId> {
     let mut builder = ScannerBuilder::new();
 
     for (pat, &sym) in grammar.terminal_mapper() {

@@ -1,6 +1,5 @@
-use core::fmt;
-
-use quote::ToTokens;
+///! This modules parses the content of the grammar macro into a raw GrammarAst, that can then be
+///analyzed into a GrammarHir
 use syn::{
     braced,
     parse::Parse,
@@ -8,7 +7,6 @@ use syn::{
     Expr, Ident, LitStr, Token,
 };
 
-#[derive(Debug)]
 pub enum SymbolKind {
     Terminal(String),
     Nonterminal(Ident),
@@ -29,7 +27,6 @@ impl Parse for SymbolKind {
     }
 }
 
-#[derive(Debug)]
 pub struct Symbol {
     name: Option<Ident>,
     kind: SymbolKind,
@@ -79,21 +76,6 @@ impl Rhs {
     }
 }
 
-impl fmt::Debug for Rhs {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Rhs")
-            .field("syms", &self.syms)
-            .field(
-                "handler",
-                &self
-                    .handler
-                    .as_ref()
-                    .map(|h| h.to_token_stream().to_string()),
-            )
-            .finish()
-    }
-}
-
 impl Parse for Rhs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut syms = Vec::new();
@@ -120,7 +102,6 @@ impl Parse for Rhs {
     }
 }
 
-#[derive(Debug)]
 pub struct Rule {
     lhs: Ident,
     rhs: Rhs,
@@ -139,12 +120,11 @@ impl Rule {
     }
 }
 
-#[derive(Debug)]
-pub struct ParsedGrammar {
+pub struct GrammarAst {
     rules: Vec<Rule>,
 }
 
-impl ParsedGrammar {
+impl GrammarAst {
     pub fn rules(&self) -> &[Rule] {
         &self.rules
     }
@@ -176,7 +156,7 @@ fn parse_rule(input: syn::parse::ParseStream, rules: &mut Vec<Rule>) -> syn::Res
     Ok(())
 }
 
-impl Parse for ParsedGrammar {
+impl Parse for GrammarAst {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut rules = Vec::new();
         while input.peek(Ident) {
