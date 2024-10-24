@@ -1,3 +1,5 @@
+use crate::IntoU32;
+
 use super::{BitSet, BlockRepr};
 use super::ops::union::Union;
 use super::ops::intersection::Intersection;
@@ -7,7 +9,7 @@ use super::blocks_iter::BlocksIter;
 /// This trait represent types that behave like bitset, and operation that can be performed on them
 pub trait BitSetLike {
     fn blocks(&self) -> impl Iterator<Item = BlockRepr>;
-    fn contains(&self, e: u32) -> bool;
+    fn contains(&self, e: impl IntoU32) -> bool;
 
     /// Collect the content of self into a bitset
     fn collect(&self) -> BitSet {
@@ -53,8 +55,7 @@ impl<T: BitSetLike> BitSetLike for &T {
         T::blocks(self)
     }
 
-    fn contains(&self, e: u32) -> bool {
+    fn contains(&self, e: impl IntoU32) -> bool {
         T::contains(self, e)
     }
 }
-

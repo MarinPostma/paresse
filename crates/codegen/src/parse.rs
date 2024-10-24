@@ -1,14 +1,19 @@
-///! This modules parses the content of the grammar macro into a raw GrammarAst, that can then be
-///analyzed into a GrammarHir
-use syn::{
-    braced,
-    parse::Parse,
-    token::Brace,
-    Expr, Ident, LitStr, Token,
-};
+//! This modules parses the content of the grammar macro into a raw GrammarAst, that can then be
+//! analyzed into a GrammarHir
+use syn::{braced, Expr, Ident, LitStr, Token};
+use syn::parse::Parse;
+use syn::token::Brace;
+
+#[derive(Clone, Debug)]
+pub enum TerminalKind {
+    /// matches the empty string
+    Epsilon,
+    /// matches a regex pattern
+    Pattern(String),
+}
 
 pub enum SymbolKind {
-    Terminal(String),
+    Terminal(TerminalKind),
     Nonterminal(Ident),
 }
 
@@ -17,7 +22,11 @@ impl Parse for SymbolKind {
         let lookahead = input.lookahead1();
         if lookahead.peek(LitStr) {
             let pat = input.parse::<LitStr>()?.value();
-            Ok(Self::Terminal(pat))
+            if pat.is_empty() {
+                Ok(Self::Terminal(TerminalKind::Epsilon))
+            } else {
+                Ok(Self::Terminal(TerminalKind::Pattern(pat)))
+            }
         } else if lookahead.peek(Ident) {
             let nt = input.parse::<Ident>()?;
             Ok(Self::Nonterminal(nt))

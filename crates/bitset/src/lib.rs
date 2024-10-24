@@ -12,6 +12,24 @@ mod blocks_iter;
 type BlockRepr = u128;
 pub type Iter<'a> = BlocksIter<Copied<std::slice::Iter<'a, BlockRepr>>>;
 
+pub trait IntoU32: Copy {
+    fn into_u32(self) -> u32;
+}
+
+impl IntoU32 for u32 {
+    #[inline]
+    fn into_u32(self) -> u32 {
+        self
+    }
+}
+
+impl IntoU32 for i32 {
+    fn into_u32(self) -> u32 {
+        if self < 0 { panic!("invalid conversion to u32") }
+        self as u32
+    }
+}
+
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct BitSet {
     blocks: Vec<BlockRepr>,
@@ -59,8 +77,8 @@ impl BitSet {
     }
 
     /// Inset an element in the bitset
-    pub fn insert(&mut self, e: u32) {
-        let (block, bit) = self.pos(e);
+    pub fn insert(&mut self, e: impl IntoU32) {
+        let (block, bit) = self.pos(e.into_u32());
 
         if block >= self.blocks.len() {
             self.blocks
@@ -71,11 +89,11 @@ impl BitSet {
     }
 
     /// Remove an element from the bitset
-    pub fn remove(&mut self, e: u32) {
+    pub fn remove(&mut self, e: impl IntoU32) {
         if self.is_empty() {
             return;
         }
-        let (block, bit) = self.pos(e);
+        let (block, bit) = self.pos(e.into_u32());
         self.blocks[block] &= !(1 << bit);
     }
 
@@ -115,11 +133,11 @@ impl BitSetLike for BitSet {
         self.blocks.iter().copied()
     }
 
-    fn contains(&self, e: u32) -> bool {
+    fn contains(&self, e: impl IntoU32) -> bool {
         if self.is_empty() {
             return false;
         }
-        let (block, bit) = self.pos(e);
+        let (block, bit) = self.pos(e.into_u32());
         (self.blocks[block] & 1 << bit) != 0
     }
 }

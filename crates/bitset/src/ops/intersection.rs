@@ -1,6 +1,6 @@
 use std::ops::BitAnd;
 
-use crate::{BitSet, BitSetLike, BlockRepr};
+use crate::{BitSet, BitSetLike, BlockRepr, IntoU32};
 
 pub struct Intersection<A, B> {
     a: A,
@@ -22,7 +22,7 @@ where
         })
     }
 
-    fn contains(&self, e: u32) -> bool {
+    fn contains(&self, e: impl IntoU32) -> bool {
         self.a.contains(e) && self.b.contains(e)
     }
 }

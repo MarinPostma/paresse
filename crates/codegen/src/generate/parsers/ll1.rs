@@ -5,7 +5,7 @@ use grammar::symbol::SymbolSet;
 use quote::{format_ident, quote, ToTokens};
 use syn::Ident;
 
-use crate::hir::{GrammarHir, NonTerminal, Rule, Symbol};
+use crate::{hir::{GrammarHir, NonTerminal, Rule, Symbol, Terminal}, parse::TerminalKind};
 
 pub struct Ll1Generator<'g> {
     grammar: &'g GrammarHir,
@@ -26,9 +26,8 @@ struct AugmentedRule<'a> {
 impl<'a> AugmentedRule<'a> {
     fn parse_items(&self) -> impl Iterator<Item = impl ToTokens> + '_ {
         let sym_action = |s: &Symbol| match s {
-            Symbol::Terminal(t) => {
-                let id = t.sym_id.as_u32();
-                let pat = t.pattern.as_str();
+            Symbol::Terminal(Terminal { sym_id, kind: TerminalKind::Pattern(pat) }) => {
+                let id = sym_id.as_u32();
                 quote! {
                     {
                        let t = self.advance();
@@ -39,6 +38,9 @@ impl<'a> AugmentedRule<'a> {
                         }
                     }
                 }
+            }
+            Symbol::Terminal(Terminal { kind: TerminalKind::Epsilon, .. }) => {
+                quote! { }
             }
             Symbol::NonTerminal(ref nt) => {
                 let f = parse_fn_name(&nt.name);
@@ -83,12 +85,25 @@ impl ToTokens for AugmentedRule<'_> {
             .first_set
             .iter()
             .filter(|s| !s.is_eof() && !s.is_epsilon())
-            .map(|s| s.as_u32());
+            .map(|s| s.as_u32())
+        .collect::<Vec<_>>();
         let parse_items = self.parse_items();
         let ret_block = self.ret_block();
-        // TODO: handle eof
+
+        let firsts = if !firsts.is_empty() {
+            quote! { Some(#(#firsts)|*) }
+        } else {
+            quote! { }
+        };
+
+        let or_eof = if self.first_set.contains(grammar::symbol::Symbol::eof()) {
+            quote! { | None }
+        } else {
+            quote! { }
+        };
+
         quote! {
-            if matches!(self.peek().map(|t| t.kind), Some(#(#firsts)|*)) {
+            if matches!(self.peek().map(|t| t.kind), #firsts #or_eof) {
                 #(#parse_items)*
                 #ret_block
             }
@@ -136,20 +151,25 @@ impl<'a> ParseFn<'a> {
 
     fn generate_fallback(&self) -> impl ToTokens {
         let rule = self.nt.name.to_string();
-        let firsts = self
+        let mut firsts = self
             .rules
             .iter()
             .map(|r| r.first_set)
             .fold(SymbolSet::new(), |agg, i| &agg | i);
-        let firsts = firsts.iter().map(|t| {
-            self.grammar
-                .terminal_mapper()
-                .iter()
-                .find(|(_, s)| *s == &t)
-                .unwrap()
-                .0
-                .as_str()
-        });
+
+        firsts.remove_epsilon();
+        firsts.remove(grammar::symbol::Symbol::eof().as_u32());
+
+        let firsts = firsts.iter()
+            .map(|t| {
+                self.grammar
+                    .terminal_mapper()
+                    .iter()
+                    .find(|(_, s)| *s == &t)
+                    .unwrap()
+                    .0
+                    .as_str()
+            });
         let expected = quote! {
             #(#firsts),*
         }.to_string();
@@ -225,10 +245,11 @@ impl<'g> Ll1Generator<'g> {
             .rules()
             .iter()
             .enumerate()
-            .map(|(i, r)| AugmentedRule {
+            .map(|(i, r)| {
+                AugmentedRule {
                 rule: r,
                 first_set: self.firstp.first_p(i),
-            })
+            } })
     }
 
     fn generate_parse_root(&self) -> impl ToTokens {

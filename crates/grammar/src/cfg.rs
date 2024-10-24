@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Index};
 
-use super::symbol::{Symbol, SymbolSet, SymbolSource};
 use super::rule::{Rule, RuleBuilder};
+use super::symbol::{Symbol, SymbolSet, SymbolSource};
 
 #[derive(Default, Debug)]
 pub struct Builder {
@@ -39,6 +39,11 @@ impl Builder {
         Symbol::epsilon()
     }
 
+    pub fn eof(&mut self) -> Symbol {
+        self.symbols.add(Symbol::eof());
+        Symbol::eof()
+    }
+
     /// Returns N new syms for that grammar
     pub fn syms<const N: usize>(&mut self) -> [Symbol; N] {
         let mut out: [u32; N] = [0; N];
@@ -63,18 +68,26 @@ impl Builder {
 
         let candidates: Vec<Symbol> = nts
             .into_iter()
-            .filter_map(|(s, c)| if c == 0 { Some(s)} else { None })
+            .filter_map(|(s, c)| if c == 0 { Some(s) } else { None })
             .collect();
 
         if candidates.len() == 1 {
             candidates[0]
+        } else if candidates.len() > 1 {
+            panic!("multiple start symbol candidates: {candidates:?}")
         } else {
-            panic!("multiple start symbol candidates")
+            panic!("no candidates for a start symbol")
         }
     }
 
-    pub fn build(self) -> Grammar {
-        let start = self.find_start();
+    /// Build the grammar. Optionally the start symbol of the grammar can be passed. If it's not
+    /// passed then we attempt to find it, as the only lhs that doesn't appear in any rhs. Grammars
+    /// that are reccursive on the start symbol may not have an obvious start symbol, in that case,
+    /// either pass the start symbol to the build method, or add a new lhs that points to the start
+    /// of the grammar.
+    pub fn build(self, start: Option<Symbol>) -> Grammar {
+        let start = start.unwrap_or_else(|| self.find_start());
+        // add eof to the start rule
         Grammar {
             start,
             rules: self.rules,
@@ -131,6 +144,7 @@ impl Terminals {
         let nt = grammar.non_terminals();
         let mut inner = grammar.symbols.difference(&nt.inner);
         inner.remove_epsilon();
+        inner.add_eof();
         Self { inner }
     }
 }
@@ -198,6 +212,14 @@ pub struct FollowSets {
     inner: BTreeMap<Symbol, SymbolSet>,
 }
 
+impl Index<Symbol> for FollowSets {
+    type Output = SymbolSet;
+
+    fn index(&self, index: Symbol) -> &Self::Output {
+        self.follow(index)
+    }
+}
+
 impl FollowSets {
     fn compute(grammar: &Grammar) -> Self {
         let mut follow_sets: BTreeMap<Symbol, SymbolSet> = BTreeMap::new();
@@ -205,8 +227,15 @@ impl FollowSets {
         let non_terminals = grammar.non_terminals();
 
         for nt in &*non_terminals {
-            follow_sets.insert(nt, Default::default());
+            if nt == grammar.start() {
+                let mut set = SymbolSet::new();
+                set.add_eof();
+                follow_sets.insert(nt, set);
+            } else {
+                follow_sets.insert(nt, Default::default());
+            }
         }
+        
 
         follow_sets
             .entry(grammar.start)
@@ -244,6 +273,7 @@ impl FollowSets {
     }
 
     /// Returns the follow set for the passed symbol
+    #[inline]
     pub fn follow(&self, s: Symbol) -> &SymbolSet {
         &self.inner[&s]
     }
@@ -252,6 +282,14 @@ impl FollowSets {
 #[derive(Debug)]
 pub struct FirstSets {
     inner: BTreeMap<Symbol, SymbolSet>,
+}
+
+impl Index<Symbol> for FirstSets {
+    type Output = SymbolSet;
+
+    fn index(&self, index: Symbol) -> &Self::Output {
+        self.first(index)
+    }
 }
 
 impl FirstSets {
@@ -365,4 +403,92 @@ impl AugmentedFirstSets {
     //     }
     //     true
     // }
+}
+
+#[cfg(test)]
+mod test {
+    use bitset::bitset;
+
+    use super::*;
+
+    #[test]
+    fn first_sets() {
+        let mut builder = Builder::new();
+        let syms
+        @ [expr, exprp, term, termp, factor, lparen, rparen, plus, minus, mult, div, num, name] =
+            builder.syms();
+        let eps = builder.epsilon();
+        let eof = builder.eof();
+        builder.rule(expr).is([term, exprp, eof]);
+        builder
+            .rule(exprp)
+            .is([plus, term, exprp])
+            .is([minus, term, exprp])
+            .is([eps]);
+        builder.rule(term).is([factor, termp]);
+        builder
+            .rule(termp)
+            .is([mult, factor, termp])
+            .is([div, factor, termp])
+            .is([eps]);
+        builder
+            .rule(factor)
+            .is([num])
+            .is([name])
+            .is([lparen, expr, rparen]);
+        let grammar = builder.build(Some(expr));
+        let firsts = grammar.first_sets();
+
+        // There is a first for every symbol in the grammar + 2 for epsilon and eof
+        assert_eq!(firsts.inner.len(), syms.len() + 2);
+        // all non-terminals first sets contain only themselves
+        let terminals = grammar.terminals();
+        for terminal in terminals.iter() {
+            assert_eq!(&*firsts[terminal], &bitset![terminal]);
+        }
+
+        assert_eq!(&*firsts[expr], &bitset![lparen, name, num]);
+        assert_eq!(&*firsts[exprp], &bitset![plus, minus, eps]);
+        assert_eq!(&*firsts[term], &bitset![lparen, name, num]);
+        assert_eq!(&*firsts[termp], &bitset![mult, div, eps]);
+        assert_eq!(&*firsts[factor], &bitset![lparen, name, num]);
+    }
+
+    #[test]
+    fn follow_sets() {
+        let mut builder = Builder::new();
+        let [expr, exprp, term, termp, factor, lparen, rparen, plus, minus, mult, div, num, name] =
+            builder.syms();
+        let eps = builder.epsilon();
+        let eof = builder.eof();
+        builder.rule(expr).is([term, exprp]);
+        builder
+            .rule(exprp)
+            .is([plus, term, exprp])
+            .is([minus, term, exprp])
+            .is([eps]);
+        builder.rule(term).is([factor, termp]);
+        builder
+            .rule(termp)
+            .is([mult, factor, termp])
+            .is([div, factor, termp])
+            .is([eps]);
+        builder
+            .rule(factor)
+            .is([num])
+            .is([name])
+            .is([lparen, expr, rparen]);
+        let grammar = builder.build(Some(expr));
+        let follow = grammar.follow_sets();
+        let non_terminals = grammar.non_terminals();
+
+        // there is a follow set for each non-terminal
+        assert_eq!(follow.inner.len(), non_terminals.len());
+
+        assert_eq!(&*follow[expr], &bitset![eof, rparen]);
+        assert_eq!(&*follow[exprp], &bitset![eof, rparen]);
+        assert_eq!(&*follow[term], &bitset![eof, rparen, plus, minus]);
+        assert_eq!(&*follow[termp], &bitset![eof, rparen, plus, minus]);
+        assert_eq!(&*follow[factor], &bitset![eof, rparen, plus, minus, mult, div]);
+    }
 }

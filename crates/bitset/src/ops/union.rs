@@ -1,6 +1,6 @@
 use std::ops::{BitOr, BitOrAssign};
 
-use crate::{BitSet, BitSetLike, BlockRepr};
+use crate::{BitSet, BitSetLike, BlockRepr, IntoU32};
 
 pub struct Union<A, B> {
     a: A,
@@ -30,7 +30,7 @@ where
         })
     }
 
-    fn contains(&self, e: u32) -> bool {
+    fn contains(&self, e: impl IntoU32) -> bool {
         self.a.contains(e) || self.b.contains(e)
     }
 }

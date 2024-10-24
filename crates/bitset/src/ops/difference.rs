@@ -1,6 +1,6 @@
 use std::ops::Sub;
 
-use crate::{BitSet, BitSetLike, BlockRepr};
+use crate::{BitSet, BitSetLike, BlockRepr, IntoU32};
 
 pub struct Difference<A, B> {
     a: A,
@@ -29,7 +29,7 @@ impl<A, B> BitSetLike for Difference<A, B>
         })
     }
 
-    fn contains(&self, e: u32) -> bool {
+    fn contains(&self, e: impl IntoU32) -> bool {
         self.a.contains(e) && !self.b.contains(e)
     }
 }

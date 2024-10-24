@@ -1,12 +1,23 @@
 use std::ops::{BitOr, Deref, DerefMut};
 
-use bitset::{BitSet, BitSetLike as _};
+use bitset::{BitSet, BitSetLike as _, IntoU32};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Symbol(u32);
 
+// impement only into because, it's always ok to convert a Symbol to u32, but not the other way
+// around.
+#[allow(clippy::from_over_into)]
+impl IntoU32 for Symbol {
+    #[inline]
+    fn into_u32(self) -> u32 {
+        self.as_u32()
+    }
+}
+
 impl Symbol {
+    #[inline]
     pub const fn as_u32(&self) -> u32 {
         self.0
     }
@@ -69,15 +80,15 @@ impl SymbolSet {
     }
 
     pub fn add_epsilon(&mut self) {
-        self.inner.insert(0);
+        self.inner.insert(Symbol::epsilon());
     }
 
     pub fn remove_epsilon(&mut self) {
-        self.inner.remove(0);
+        self.inner.remove(Symbol::epsilon());
     }
 
     pub fn contains_epsilon(&self) -> bool {
-        self.inner.contains(0)
+        self.inner.contains(Symbol::epsilon())
     }
     
     pub fn add(&mut self, s: Symbol) {
@@ -94,6 +105,10 @@ impl SymbolSet {
 
     pub fn iter(&self) -> Iter {
         Iter(self.inner.iter())
+    }
+
+    pub(crate) fn add_eof(&mut self) {
+        self.inner.insert(Symbol::eof())
     }
 }
 

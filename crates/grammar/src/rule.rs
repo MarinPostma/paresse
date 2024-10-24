@@ -15,6 +15,10 @@ impl Rule {
     pub fn rhs(&self) -> &[Symbol] {
         &self.rhs
     }
+
+    pub fn push_rhs(&mut self, s: Symbol) {
+        self.rhs.push(s)
+    }
 }
 
 #[derive(Debug)]

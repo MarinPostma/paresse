@@ -3,19 +3,21 @@ use std::collections::HashMap;
 use syn::{Expr, Ident};
 use grammar::symbol::Symbol as SymbolId;
 
-use crate::parse::{GrammarAst, SymbolKind};
+use crate::parse::{GrammarAst, SymbolKind, TerminalKind};
 
-
+#[derive(Debug)]
 pub struct NonTerminal {
     sym_id: SymbolId,
     pub name: Ident,
 }
 
+#[derive(Debug)]
 pub struct Terminal {
     pub sym_id: SymbolId,
-    pub pattern: String,
+    pub kind: TerminalKind,
 }
 
+#[derive(Debug)]
 pub enum Symbol {
     Terminal(Terminal),
     NonTerminal(NonTerminal),
@@ -30,6 +32,7 @@ impl Symbol {
     }
 }
 
+#[derive(Debug)]
 pub struct MaybeBoundSymbol {
     pub binding: Option<Ident>,
     pub sym: Symbol,
@@ -80,10 +83,10 @@ impl<'a> GrammarBuilder<'a> {
             let mut rhs = Vec::new();
             for sym in rule.rhs().syms() {
                 let s = match sym.kind() {
-                    SymbolKind::Terminal(pat) => {
-                        let sym_id = self.get_terminal_sym(pat);
+                    SymbolKind::Terminal(kind) => {
+                        let sym_id = self.get_terminal_sym(kind);
                         Symbol::Terminal(Terminal {
-                            sym_id, pattern: pat.clone(),
+                            sym_id, kind: kind.clone(),
                         })
                     },
                     SymbolKind::Nonterminal(nt) => {
@@ -110,7 +113,7 @@ impl<'a> GrammarBuilder<'a> {
             rules: self.rules,
             non_terminal_mapper: self.non_terminal_mapper,
             terminal_mapper: self.terminal_mapper,
-            grammar: self.builder.build(),
+            grammar: self.builder.build(None),
         }
     }
 
@@ -125,14 +128,22 @@ impl<'a> GrammarBuilder<'a> {
         }
     }
 
-    fn get_terminal_sym(&mut self, pat: &str) -> SymbolId {
-        match self.terminal_mapper.get(pat) {
-            Some(&id) => id,
-            None => {
-                let id = self.builder.next_sym();
-                self.terminal_mapper.insert(pat.to_owned(), id);
-                id
-            }
+    fn get_terminal_sym(&mut self, t: &TerminalKind) -> SymbolId {
+        match t {
+            TerminalKind::Epsilon => {
+                self.builder.epsilon()
+            },
+            TerminalKind::Pattern(ref pat) => {
+                match self.terminal_mapper.get(pat) {
+                    Some(&id) => id,
+                    None => {
+                        let id = self.builder.next_sym();
+                        self.terminal_mapper.insert(pat.to_owned(), id);
+                        id
+                    }
+                }
+
+            },
         }
     }
 }
