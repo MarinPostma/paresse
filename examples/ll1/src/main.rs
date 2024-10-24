@@ -1,49 +1,154 @@
+
 type Num = u64;
-#[derive(Default, Debug)]
-struct Expr;
-#[derive(Default)]
-struct Exprp;
+
+#[derive(Debug)]
+enum Expr {
+    Num(u64),
+    Mult(Box<Self>, Box<Self>),
+    Div(Box<Self>, Box<Self>),
+    Plus(Box<Self>, Box<Self>),
+    Minus(Box<Self>, Box<Self>),
+}
+
+impl Expr {
+    fn merge(lhs: Term, rhs: Exprp) -> Self {
+        let lhs: Box<Expr> = lhs.into();
+
+        match rhs {
+            Exprp::Plus(t, e) => { 
+                Self::Plus(lhs, Self::merge(t, *e).into())
+            },
+            Exprp::Minus(t, e) => {
+                Self::Minus(lhs, Self::merge(t, *e).into())
+            },
+            Exprp::None => *lhs,
+        }
+    }
+
+    fn eval(&self) -> u64 {
+        match self {
+            Expr::Num(u) => *u,
+            Expr::Mult(l, r) => l.eval() * r.eval(),
+            Expr::Div(l, r) => l.eval() / r.eval(),
+            Expr::Plus(l, r) => l.eval() + r.eval(),
+            Expr::Minus(l, r) => l.eval() - r.eval(),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+enum Exprp {
+    Plus(Term, Box<Self>),
+    Minus(Term, Box<Self>),
+    #[default]
+    None,
+}
+
+#[derive(Debug)]
+struct Start(Expr);
+
+#[derive(Debug)]
+enum Term {
+    Expr(Box<Expr>),
+    Mult(Box<Expr>, Box<Expr>),
+    Div(Box<Expr>, Box<Expr>),
+}
+
+impl From<Term> for Box<Expr> {
+    fn from(value: Term) -> Self {
+        match value {
+            Term::Expr(e) => e,
+            Term::Mult(l, r) => Expr::Mult(l, r).into(),
+            Term::Div(l, r) => Expr::Div(l, r).into(),
+        }
+    }
+}
+
+impl Term {
+    fn merge(lhs: Factor, rhs: Termp) -> Self {
+        let lhs: Box<Expr> = lhs.into();
+
+        let merge = |f, t| {
+            match Self::merge(f, t) {
+                Term::Expr(e) => e,
+                Term::Mult(lhs, rhs) => Box::new(Expr::Mult(lhs, rhs)),
+                Term::Div(lhs, rhs) => Box::new(Expr::Div(lhs, rhs)),
+            }
+        };
+
+        match rhs {
+            Termp::Mult(f, t) => { 
+                let rhs = merge(f, *t);
+                Self::Mult(lhs, rhs)
+            },
+            Termp::Div(f, t) => {
+                let rhs = merge(f, *t);
+                Self::Div(lhs, rhs)
+            },
+            Termp::None => Term::Expr(lhs),
+        }
+    }
+}
 
 #[derive(Default, Debug)]
-struct Start;
+enum Termp {
+    Mult(Factor, Box<Self>),
+    Div(Factor, Box<Self>),
+    #[default]
+    None,
+}
 
-#[derive(Default, Debug)]
-struct Term;
+#[derive(Debug)]
+enum Factor {
+    Num(u64),
+    Expr(Box<Expr>),
+}
 
-#[derive(Default, Debug)]
-struct Termp;
-
-#[derive(Default, Debug)]
-struct Factor;
+impl From<Factor> for Box<Expr> {
+    fn from(value: Factor) -> Self {
+        match value {
+            Factor::Num(n) => Box::new(Expr::Num(n)),
+            Factor::Expr(e) => e,
+        }
+    }
+}
 
 // TODO:
 // - pass token content, instead of spanned
 // - Detect non-terminal reference and return an error 
 // - error handling
 // - Named terminals
+// - add positional args?
+// - explicitely pass start symbol
+// - parser config
+// - support pattern in bindings: e.g <Expr { op, lhs, rhs }:Expr>, or maybe infer type?
+// - type inference? see lalrpop
+// - return meaningful error if grammar is not predictive
 
 codegen::grammar! {
-    Start = Expr;
-    Expr = Term Exprp;
+    Start = <e:Expr> => Start(e);
+    Expr = <t:Term> <e:Exprp> => Expr::merge(t, e);
     Exprp = {
-        "+" Term Exprp,
-        "-" Term Exprp
+        "+" <t:Term> <e:Exprp> => Exprp::Plus(t, e.into()),
+        "-" <t:Term> <e:Exprp> => Exprp::Minus(t, e.into()),
         "",
     };
     // todo pass token str instead
-    Term = Factor Termp;
+    Term = <f:Factor> <t:Termp> => Term::merge(f, t);
     Termp = {
-        "*" Factor Termp,
-        "/" Factor Termp,
+        "*" <f:Factor> <t:Termp> => Termp:: Mult(f, t.into()),
+        "/" <f:Factor> <t:Termp> => Termp::Div(f, t.into()),
         "",
     };
     Factor = {
-        Num,
-        "\\(" Expr "\\)",
+        <n:Num> => Factor::Num(n),
+        "\\(" <e:Expr> "\\)" => Factor::Expr(e.into()),
     };
     Num = <n:"[0-9]+"> => n.token.parse().unwrap();
 }
 
 fn main() {
-    dbg!(parser::Parser::parse("1 + 1"));
+    let expr = std::env::args().skip(1).collect::<String>();
+    let res = parser::Parser::parse(&expr).0.eval();
+    println!("{expr} = {res}");
 }

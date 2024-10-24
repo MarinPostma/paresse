@@ -528,7 +528,6 @@ mod test {
         let first = grammar.first_sets();
         let first_p = grammar.augmented_first_set(&first, &follow);
 
-        dbg!(&first_p[7], &grammar.rules()[7]);
         panic!()
     }
 }

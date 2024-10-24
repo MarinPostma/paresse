@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 quote = "1.0.37"
-syn = { version = "2.0.79", features = ["parsing", "printing"] }
+syn = { version = "2.0.79", features = ["parsing", "printing", "full"] }
 lexer = { path = "../lexer/" }
 grammar = { path = "../grammar/" }
 proc-macro2 = "1.0.88"
