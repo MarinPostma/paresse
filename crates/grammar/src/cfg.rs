@@ -367,6 +367,14 @@ pub struct AugmentedFirstSets {
     inner: Vec<SymbolSet>,
 }
 
+impl Index<usize> for AugmentedFirstSets {
+    type Output = SymbolSet;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.inner[index]
+    }
+}
+
 impl AugmentedFirstSets {
     fn compute(grammar: &Grammar, first_sets: &FirstSets, follow_sets: &FollowSets) -> Self {
         let mut inner = Vec::new();
@@ -490,5 +498,37 @@ mod test {
         assert_eq!(&*follow[term], &bitset![eof, rparen, plus, minus]);
         assert_eq!(&*follow[termp], &bitset![eof, rparen, plus, minus]);
         assert_eq!(&*follow[factor], &bitset![eof, rparen, plus, minus, mult, div]);
+    }
+
+    #[test]
+    fn firstp_sets() {
+        let mut builder = Builder::new();
+        let [expr, exprp, term, termp, factor, lparen, rparen, plus, minus, mult, div, num, name] =
+            builder.syms();
+        let eps = builder.epsilon();
+        builder.rule(expr).is([term, exprp]);
+        builder
+            .rule(exprp)
+            .is([plus, term, exprp])
+            .is([minus, term, exprp])
+            .is([eps]);
+        builder.rule(term).is([factor, termp]);
+        builder
+            .rule(termp)
+            .is([mult, factor, termp])
+            .is([div, factor, termp])
+            .is([eps]);
+        builder
+            .rule(factor)
+            .is([num])
+            .is([name])
+            .is([lparen, expr, rparen]);
+        let grammar = builder.build(Some(expr));
+        let follow = grammar.follow_sets();
+        let first = grammar.first_sets();
+        let first_p = grammar.augmented_first_set(&first, &follow);
+
+        dbg!(&first_p[7], &grammar.rules()[7]);
+        panic!()
     }
 }

@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
-use syn::{Expr, Ident};
 use grammar::symbol::Symbol as SymbolId;
+use quote::ToTokens;
+use syn::{Expr, Ident};
 
 use crate::parse::{GrammarAst, SymbolKind, TerminalKind};
 
@@ -45,6 +46,16 @@ pub struct Rule {
     pub handler: Option<Expr>,
 }
 
+impl Debug for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Rule")
+            .field("lhs", &self.lhs)
+            .field("rhs", &self.rhs)
+            .field("handler", &self.handler.as_ref().map(|h| h.to_token_stream().to_string()))
+            .finish()
+    }
+}
+
 impl Rule {
     pub fn lhs(&self) -> &NonTerminal {
         &self.lhs
@@ -86,12 +97,16 @@ impl<'a> GrammarBuilder<'a> {
                     SymbolKind::Terminal(kind) => {
                         let sym_id = self.get_terminal_sym(kind);
                         Symbol::Terminal(Terminal {
-                            sym_id, kind: kind.clone(),
+                            sym_id,
+                            kind: kind.clone(),
                         })
-                    },
+                    }
                     SymbolKind::Nonterminal(nt) => {
                         let sym_id = self.get_non_terminal_symbol(nt);
-                        Symbol::NonTerminal(NonTerminal { sym_id, name: nt.clone() })
+                        Symbol::NonTerminal(NonTerminal {
+                            sym_id,
+                            name: nt.clone(),
+                        })
                     }
                 };
 
@@ -103,9 +118,15 @@ impl<'a> GrammarBuilder<'a> {
                 rhs.push(s);
             }
 
-            self.builder.rule(lhs.sym_id).is(rhs.iter().map(|s| s.sym.symbol_id()));
+            self.builder
+                .rule(lhs.sym_id)
+                .is(rhs.iter().map(|s| s.sym.symbol_id()));
 
-            let rule = Rule { lhs, rhs, handler: rule.handler().cloned() };
+            let rule = Rule {
+                lhs,
+                rhs,
+                handler: rule.handler().cloned(),
+            };
             self.rules.push(rule);
         }
 
@@ -130,25 +151,20 @@ impl<'a> GrammarBuilder<'a> {
 
     fn get_terminal_sym(&mut self, t: &TerminalKind) -> SymbolId {
         match t {
-            TerminalKind::Epsilon => {
-                self.builder.epsilon()
-            },
-            TerminalKind::Pattern(ref pat) => {
-                match self.terminal_mapper.get(pat) {
-                    Some(&id) => id,
-                    None => {
-                        let id = self.builder.next_sym();
-                        self.terminal_mapper.insert(pat.to_owned(), id);
-                        id
-                    }
+            TerminalKind::Epsilon => self.builder.epsilon(),
+            TerminalKind::Pattern(ref pat) => match self.terminal_mapper.get(pat) {
+                Some(&id) => id,
+                None => {
+                    let id = self.builder.next_sym();
+                    self.terminal_mapper.insert(pat.to_owned(), id);
+                    id
                 }
-
             },
         }
     }
 }
 
-pub struct GrammarHir { 
+pub struct GrammarHir {
     rules: Vec<Rule>,
     grammar: grammar::cfg::Grammar,
     /// maps rule name to rule id

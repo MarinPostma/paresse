@@ -18,6 +18,7 @@ impl<'g> ToTokens for Ll1Generator<'g> {
     }
 }
 
+/// A grammar rule, alongside iters augmented first set
 struct AugmentedRule<'a> {
     rule: &'a Rule,
     first_set: &'a SymbolSet,
