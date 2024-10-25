@@ -3,46 +3,33 @@
 version = 3
 
 [[package]]
-name = "bitset"
-version = "0.1.0"
-
-[[package]]
-name = "codegen"
+name = "ll1"
 version = "0.1.0"
 dependencies = [
- "bitset",
- "grammar",
- "lexer",
+ "paresse",
+]
+
+[[package]]
+name = "paresse"
+version = "0.1.0"
+dependencies = [
+ "paresse-codegen",
+ "paresse-core",
+]
+
+[[package]]
+name = "paresse-codegen"
+version = "0.1.0"
+dependencies = [
+ "paresse-core",
  "proc-macro2",
  "quote",
  "syn",
 ]
 
 [[package]]
-name = "either"
+name = "paresse-core"
 version = "0.1.0"
-
-[[package]]
-name = "grammar"
-version = "0.1.0"
-dependencies = [
- "bitset",
-]
-
-[[package]]
-name = "lexer"
-version = "0.1.0"
-dependencies = [
- "bitset",
- "either",
-]
-
-[[package]]
-name = "ll1"
-version = "0.1.0"
-dependencies = [
- "codegen",
-]
 
 [[package]]
 name = "proc-macro2"

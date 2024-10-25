@@ -125,7 +125,7 @@ impl From<Factor> for Box<Expr> {
 // - type inference? see lalrpop
 // - return meaningful error if grammar is not predictive
 
-codegen::grammar! {
+paresse::grammar! {
     Start = <e:Expr> => Start(e);
     Expr = <t:Term> <e:Exprp> => Expr::merge(t, e);
     Exprp = {
@@ -149,6 +149,6 @@ codegen::grammar! {
 
 fn main() {
     let expr = std::env::args().skip(1).collect::<String>();
-    let res = parser::Parser::parse(&expr).0.eval();
+    let res = dbg!(parser::Parser::parse(&expr).0).eval();
     println!("{expr} = {res}");
 }

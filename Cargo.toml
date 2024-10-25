@@ -1,11 +1,17 @@
+[package]
+name = "paresse"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+paresse-core = { path = "crates/paresse-core" }
+paresse-codegen = { path = "crates/paresse-codegen" }
+
 [workspace]
 resolver = "2"
 members = [
-    "crates/bitset", "crates/codegen",
-    "crates/either",
-    "crates/grammar",
-    "crates/lexer",
-    "crates/parsers", 
+    "crates/paresse-core",
+    "crates/paresse-codegen",
 ]
 exclude = [
     "examples/ll1",
