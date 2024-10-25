@@ -1,4 +1,3 @@
-
 type Num = u64;
 
 #[derive(Debug)]
@@ -12,19 +11,17 @@ enum Expr {
 
 impl Expr {
     fn merge(lhs: Term, rhs: Exprp) -> Self {
-        let lhs: Box<Expr> = lhs.into();
+        let lhs = lhs.0;
+
+        fn merge(lhs: Box<Expr>, t: Term, e: Exprp, cons: fn(Box<Expr>, Box<Expr>) -> Expr) -> Expr {
+            let rhs = t.0;
+            let lhs = cons(lhs, rhs);
+            Expr::merge(Term(lhs.into()), e)
+        }
 
         match rhs {
-            Exprp::Plus(t, e) => { 
-                let rhs = t.into();
-                let lhs = Self::Plus(lhs, rhs);
-                Self::merge(Term::Expr(lhs.into()), *e)
-            },
-            Exprp::Minus(t, e) => {
-                let rhs = t.into();
-                let lhs = Self::Minus(lhs, rhs);
-                Self::merge(Term::Expr(lhs.into()), *e)
-            },
+            Exprp::Plus(t, e) => merge(lhs, t, *e, Self::Plus),
+            Exprp::Minus(t, e) => merge(lhs, t, *e, Self::Minus),
             Exprp::None => *lhs,
         }
     }
@@ -52,46 +49,22 @@ enum Exprp {
 struct Start(Expr);
 
 #[derive(Debug)]
-enum Term {
-    Expr(Box<Expr>),
-    Mult(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
-}
-
-impl From<Term> for Box<Expr> {
-    fn from(value: Term) -> Self {
-        match value {
-            Term::Expr(e) => e,
-            Term::Mult(l, r) => Expr::Mult(l, r).into(),
-            Term::Div(l, r) => Expr::Div(l, r).into(),
-        }
-    }
-}
+struct Term(Box<Expr>);
 
 impl Term {
     fn merge(lhs: Factor, rhs: Termp) -> Self {
         let lhs: Box<Expr> = lhs.into();
 
-        let merge = |f, t| {
-            match Self::merge(f, t) {
-                Term::Expr(e) => e,
-                Term::Mult(lhs, rhs) => Box::new(Expr::Mult(lhs, rhs)),
-                Term::Div(lhs, rhs) => Box::new(Expr::Div(lhs, rhs)),
-            }
-        };
+        fn merge(lhs: Box<Expr>, f: Factor, t: Termp, cons: fn(Box<Expr>, Box<Expr>) -> Expr) -> Term {
+            let rhs = f.into();
+            let f = Factor::Expr(cons(lhs, rhs).into());
+            Term::merge(f, t)
+        }
 
         match rhs {
-            Termp::Mult(f, t) => { 
-                let rhs = f.into();
-                let f = Factor::Expr(Expr::Mult(lhs, rhs).into());
-                Self::merge(f, *t)
-            },
-            Termp::Div(f, t) => {
-                let rhs = f.into();
-                let f = Factor::Expr(Expr::Div(lhs, rhs).into());
-                Self::merge(f, *t)
-            },
-            Termp::None => Term::Expr(lhs),
+            Termp::Mult(f, t) => merge(lhs, f, *t, Expr::Mult),
+            Termp::Div(f, t) => merge(lhs, f, *t, Expr::Div),
+            Termp::None => Self(lhs),
         }
     }
 }
