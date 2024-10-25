@@ -16,10 +16,14 @@ impl Expr {
 
         match rhs {
             Exprp::Plus(t, e) => { 
-                Self::Plus(lhs, Self::merge(t, *e).into())
+                let rhs = t.into();
+                let lhs = Self::Plus(lhs, rhs);
+                Self::merge(Term::Expr(lhs.into()), *e)
             },
             Exprp::Minus(t, e) => {
-                Self::Minus(lhs, Self::merge(t, *e).into())
+                let rhs = t.into();
+                let lhs = Self::Minus(lhs, rhs);
+                Self::merge(Term::Expr(lhs.into()), *e)
             },
             Exprp::None => *lhs,
         }
@@ -78,12 +82,14 @@ impl Term {
 
         match rhs {
             Termp::Mult(f, t) => { 
-                let rhs = merge(f, *t);
-                Self::Mult(lhs, rhs)
+                let rhs = f.into();
+                let f = Factor::Expr(Expr::Mult(lhs, rhs).into());
+                Self::merge(f, *t)
             },
             Termp::Div(f, t) => {
-                let rhs = merge(f, *t);
-                Self::Div(lhs, rhs)
+                let rhs = f.into();
+                let f = Factor::Expr(Expr::Div(lhs, rhs).into());
+                Self::merge(f, *t)
             },
             Termp::None => Term::Expr(lhs),
         }
@@ -149,6 +155,6 @@ paresse::grammar! {
 
 fn main() {
     let expr = std::env::args().skip(1).collect::<String>();
-    let res = dbg!(parser::Parser::parse(&expr).0).eval();
+    let res = parser::Parser::parse(&expr).0.eval();
     println!("{expr} = {res}");
 }
