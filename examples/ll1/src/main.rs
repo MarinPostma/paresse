@@ -119,18 +119,6 @@ impl From<Factor> for Box<Expr> {
     }
 }
 
-// TODO:
-// - pass token content, instead of spanned
-// - Detect non-terminal reference and return an error 
-// - error handling
-// - Named terminals
-// - add positional args?
-// - explicitely pass start symbol
-// - parser config
-// - support pattern in bindings: e.g <Expr { op, lhs, rhs }:Expr>, or maybe infer type?
-// - type inference? see lalrpop
-// - return meaningful error if grammar is not predictive
-
 paresse::grammar! {
     Start = <e:Expr> => Start(e);
     Expr = <t:Term> <e:Exprp> => Expr::merge(t, e);
