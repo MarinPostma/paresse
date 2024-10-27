@@ -3,13 +3,12 @@ use std::collections::HashMap;
 use quote::{format_ident, quote, ToTokens};
 use syn::Ident;
 use paresse_core::lexer::{Scanner, ScannerBuilder};
-use paresse_core::grammar::Symbol as SymbolId;
 use paresse_core::lexer::Unit;
 
 use crate::hir::GrammarHir;
 
 pub struct LexerGenerator<'g> {
-    scanner: Scanner<SymbolId>,
+    scanner: Scanner,
     grammar: &'g GrammarHir,
 }
 
@@ -30,52 +29,26 @@ impl<'g> LexerGenerator<'g> {
         let transition_fn = self.generate_transition_fn();
         let match_states_fn = self.generate_match_states_fn();
         let start_state = self.start_state();
-        let spanned = self.gen_spanned();
 
         quote! {
             use std::fmt::Write;
             #state_enum
 
-            #spanned
-
-            #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-            enum Unit {
-                Boi,
-                Eoi,
-                Byte(u8),
-            }
-
-            impl std::fmt::Debug for Unit {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    write!(f, "{self}")
-                }
-            }
-
-            impl std::fmt::Display for Unit {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    match self {
-                        Unit::Boi => f.write_str("BOI"),
-                        Unit::Eoi => f.write_str("EOI"),
-                        Unit::Byte(c) => f.write_char(*c as char),
-                    }
-                }
-            }
-
             struct Scan<'a> {
                 input: &'a str,
                 start: usize,
-                match_info: (usize, u32),
+                match_info: (usize, u16),
                 sp: usize,
                 state: __State,
             }
 
             impl<'a> Iterator for Scan<'a> {
-                type Item = Spanned<'a>;
+                type Item = paresse::core::lexer::Token;
 
                 fn next(&mut self) -> Option<Self::Item> {
                     loop {
                         match self.next_token() {
-                            Some(t) if t.kind == u32::MAX => continue,
+                            Some(t) if t.kind == u16::MAX => continue,
                             Some(t) => return Some(t),
                             None => return None,
                         }
@@ -94,13 +67,17 @@ impl<'g> LexerGenerator<'g> {
                     }
                 }
 
-                fn next_token(&mut self) -> Option<Spanned<'a>> {
+                fn lexeme(&self, s: &paresse::core::lexer::Span) -> &str {
+                    &self.input[s.offset as usize..s.offset as usize + s.len as usize]
+                }
+
+                fn next_token(&mut self) -> Option<paresse::core::lexer::Token> {
                     if self.input.is_empty() {
                         return None;
                     }
                     self.reset();
                     while self.sp < self.input.len() {
-                        let u = Unit::Byte(self.input.as_bytes()[self.sp]);
+                        let u = paresse::core::lexer::Unit::Byte(self.input.as_bytes()[self.sp]);
                         match self.transition(u) {
                             Some(new_state) => {
                                 self.state = new_state;
@@ -131,29 +108,32 @@ impl<'g> LexerGenerator<'g> {
                 fn reset(&mut self) {
                     self.state = #start_state;
 
-                    if let Some(state) = self.transition(Unit::Boi) {
+                    if let Some(state) = self.transition(paresse::core::lexer::Unit::Boi) {
                         self.state = state;
                     }
 
                     self.match_info = (0, 0);
-                    self.sp = 0;
+                    self.sp = self.start;
                 }
 
                 fn has_match(&self) -> bool {
                     self.match_info.0 != 0
                 }
 
-                fn cut_match(&mut self) -> Spanned<'a> {
-                    let (token, rest) = self.input.split_at(self.match_info.0);
-                    self.input = rest;
-                    self.start += self.match_info.0;
+                fn current_input(&self) -> &[u8] {
+                    &self.input.as_bytes()[self.start..]
+                }
+
+                fn cut_match(&mut self) -> paresse::core::lexer::Token {
                     let kind = self.match_info.1;
-                    Spanned { 
+                    let token = paresse::core::lexer::Token {
                         kind,
-                        start: self.start,
-                        end: self.start + self.match_info.0,
-                        token,
-                    }
+                        span: paresse::core::lexer::Span::new(self.start as u32, self.match_info.0 as u32),
+                    };
+
+                    self.start = self.match_info.0;
+
+                    token
                 }
             }
         }
@@ -188,9 +168,9 @@ impl<'g> LexerGenerator<'g> {
                         .iter()
                         .map(|u| {
                             match u {
-                                Unit::Boi => quote!(Unit::Boi),
-                                Unit::Eoi => quote!(Unit::Eoi),
-                                Unit::Byte(i) => quote!(Unit::Byte(#i)),
+                                Unit::Boi => quote!(paresse::core::lexer::Unit::Boi),
+                                Unit::Eoi => quote!(paresse::core::lexer::Unit::Eoi),
+                                Unit::Byte(i) => quote!(paresse::core::lexer::Unit::Byte(#i)),
                             }
                         });
 
@@ -212,7 +192,7 @@ impl<'g> LexerGenerator<'g> {
         }
 
         quote! {
-            fn transition(&self, u: Unit) -> Option<__State> {
+            fn transition(&self, u: paresse::core::lexer::Unit) -> Option<__State> {
                 match self.state {
                     #(#arms,)*
                 }
@@ -244,52 +224,16 @@ impl<'g> LexerGenerator<'g> {
                     .iter()
                     .map(|id| self.scanner.matches()[*id])
                     .max_by_key(|m| m.1)
-                    .unwrap()
-                    .0
-                    .as_u32();
+                    .unwrap().0;
                 let state = state_ident(s_id);
                 quote!{ __State::#state => Some(#s) }
             });
 
         quote! {
-            fn match_id(state: __State) -> Option<u32> {
+            fn match_id(state: __State) -> Option<u16> {
                 match state {
                     #(#match_arms,)*
                     _ => None,
-                }
-            }
-        }
-    }
-
-    fn gen_spanned(&self) -> impl ToTokens {
-        let arms = self.grammar.terminal_mapper().iter().map(|(pat, sym)| {
-            let s = sym.as_u32();
-            let p = pat.as_str();
-            quote! { #s =>  #p }
-        });
-
-        quote! {
-            pub struct Spanned<'a> {
-                kind: u32,
-                start: usize,
-                end: usize,
-                token: &'a str,
-            }
-
-            impl<'a> std::fmt::Debug for Spanned<'a> {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    let pat = match self.kind {
-                        #(#arms,)*
-                        _ => unreachable!(),
-                    };
-
-                    f.debug_struct("Spanned")
-                        .field("start", &self.start)
-                        .field("end", &self.end)
-                        .field("token", &self.token)
-                        .field("kind", &pat)
-                        .finish()
-
                 }
             }
         }
@@ -300,15 +244,15 @@ fn state_ident(id: usize) -> Ident {
     format_ident!("S{id}")
 }
 
-fn build_scanner(grammar: &GrammarHir) -> Scanner<SymbolId> {
+fn build_scanner(grammar: &GrammarHir) -> Scanner {
     let mut builder = ScannerBuilder::new();
 
     for (pat, &sym) in grammar.terminal_mapper() {
-        builder.token(pat, sym);
+        builder.token(pat, sym.as_u32() as u16);
     }
 
     // TODO: take whitespaces as a param to the parser
-    builder.token("[ \n\t]+", SymbolId::from_u32(u32::MAX));
+    builder.token("[ \n\t]+", u16::MAX);
 
     builder.build()
 }

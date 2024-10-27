@@ -28,13 +28,13 @@ impl<'a> AugmentedRule<'a> {
     fn parse_items(&self) -> impl Iterator<Item = impl ToTokens> + '_ {
         let sym_action = |s: &Symbol| match s {
             Symbol::Terminal(Terminal { sym_id, kind: TerminalKind::Pattern(pat) }) => {
-                let id = sym_id.as_u32();
+                let id = sym_id.as_u32() as u16;
                 quote! {
                     {
                        let t = self.advance();
                         match t {
-                            Some(t) if t.kind == #id => t,
-                            Some(other) => panic!("expected {}, but found {}", #pat, other.token),
+                            Some(t) if t.kind == #id => self.tokens.lexeme(&t.span),
+                            Some(other) => panic!("expected {}, but found {}", #pat, self.tokens.lexeme(&other.span)),
                             None => panic!("unexpected eof"),
                         }
                     }
@@ -86,7 +86,7 @@ impl ToTokens for AugmentedRule<'_> {
             .first_set
             .iter()
             .filter(|s| !s.is_eof() && !s.is_epsilon())
-            .map(|s| s.as_u32())
+            .map(|s| s.as_u32() as u16)
         .collect::<Vec<_>>();
         let parse_items = self.parse_items();
         let ret_block = self.ret_block();
@@ -177,7 +177,7 @@ impl<'a> ParseFn<'a> {
         quote! {
             match self.peek() {
                 Some(tt) => {
-                    panic!("expected one of {}, but found {}", #expected, tt.token);
+                    panic!("expected one of {}, but found {}", #expected, self.tokens.lexeme(&tt.span));
                 }
                 None => panic!("unexpected EOF while parsing {}", #rule)
             }
@@ -205,15 +205,15 @@ impl<'g> Ll1Generator<'g> {
         quote! {
             pub struct Parser<'a> {
                 tokens: Scan<'a>,
-                current: Option<Spanned<'a>>,
+                current: Option<paresse::core::lexer::Token>,
             }
 
             impl<'a> Parser<'a> {
-                fn peek(&self) -> Option<&Spanned> {
+                fn peek(&self) -> Option<&paresse::core::lexer::Token> {
                     self.current.as_ref()
                 }
 
-                fn advance(&mut self) -> Option<Spanned> {
+                fn advance(&mut self) -> Option<paresse::core::lexer::Token> {
                     let current = self.current.take();
                     self.current = self.tokens.next();
                     current

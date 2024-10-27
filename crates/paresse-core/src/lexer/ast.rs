@@ -14,7 +14,7 @@ impl RegexAst {
         build_nfa_from_ast(self, builder, match_id)
     }
 
-    pub(crate) fn priority(&self) -> u32 {
+    pub(crate) fn priority(&self) -> u16 {
         match self {
             RegexAst::Match(Class::Boi | Class::Eoi) => 2,
             RegexAst::Match(Class::Chars(set)) if set.len() == 1 => 2,

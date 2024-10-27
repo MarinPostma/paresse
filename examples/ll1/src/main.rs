@@ -111,7 +111,7 @@ paresse::grammar! {
         <n:Num> => Factor::Num(n),
         "\\(" <e:Expr> "\\)" => Factor::Expr(e.into()),
     };
-    Num = <n:"[0-9]+"> => n.token.parse().unwrap();
+    Num = <n:"[0-9]+"> => n.parse().unwrap();
 }
 
 fn main() {
