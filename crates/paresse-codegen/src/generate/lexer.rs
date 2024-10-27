@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
+use paresse_core::lexer::Unit;
+use paresse_core::lexer::{Scanner, ScannerBuilder};
 use quote::{format_ident, quote, ToTokens};
 use syn::Ident;
-use paresse_core::lexer::{Scanner, ScannerBuilder};
-use paresse_core::lexer::Unit;
 
 use crate::hir::GrammarHir;
 
@@ -142,13 +142,12 @@ impl<'g> LexerGenerator<'g> {
     fn start_state(&self) -> impl ToTokens {
         let id = self.scanner.dfa().initial();
         let id = state_ident(id);
-        quote!{ __State::#id }
+        quote! { __State::#id }
     }
 
     fn generate_transition_fn(&self) -> impl ToTokens {
         let dfa = self.scanner.dfa();
-        let states = dfa
-            .states_iter();
+        let states = dfa.states_iter();
 
         let mut arms = Vec::new();
 
@@ -161,24 +160,18 @@ impl<'g> LexerGenerator<'g> {
             }
 
             let pat = state_ident(state);
-            let inner_arms = targets
-                .iter()
-                .map(|(target, units)| {
-                    let pats = units
-                        .iter()
-                        .map(|u| {
-                            match u {
-                                Unit::Boi => quote!(paresse::core::lexer::Unit::Boi),
-                                Unit::Eoi => quote!(paresse::core::lexer::Unit::Eoi),
-                                Unit::Byte(i) => quote!(paresse::core::lexer::Unit::Byte(#i)),
-                            }
-                        });
-
-                    let target = state_ident(*target);
-                    quote! {
-                        #(#pats)|* => Some(__State::#target)
-                    }
+            let inner_arms = targets.iter().map(|(target, units)| {
+                let pats = units.iter().map(|u| match u {
+                    Unit::Boi => quote!(paresse::core::lexer::Unit::Boi),
+                    Unit::Eoi => quote!(paresse::core::lexer::Unit::Eoi),
+                    Unit::Byte(i) => quote!(paresse::core::lexer::Unit::Byte(#i)),
                 });
+
+                let target = state_ident(*target);
+                quote! {
+                    #(#pats)|* => Some(__State::#target)
+                }
+            });
             let arm = quote! {
                 __State::#pat => {
                     match u {
@@ -202,10 +195,7 @@ impl<'g> LexerGenerator<'g> {
 
     fn generate_state_enum(&self) -> impl ToTokens {
         let dfa = self.scanner.dfa();
-        let state_variants = dfa
-            .states_iter()
-            .map(state_ident)
-            .collect::<Vec<_>>();
+        let state_variants = dfa.states_iter().map(state_ident).collect::<Vec<_>>();
 
         quote! {
             #[derive(Clone, Copy, Debug)]
@@ -217,17 +207,16 @@ impl<'g> LexerGenerator<'g> {
 
     fn generate_match_states_fn(&self) -> impl ToTokens {
         let dfa = self.scanner.dfa();
-        let match_arms = dfa.match_states()
-            .iter()
-            .map(|(&s_id, m_ids)| {
-                let s = m_ids
-                    .iter()
-                    .map(|id| self.scanner.matches()[*id])
-                    .max_by_key(|m| m.1)
-                    .unwrap().0;
-                let state = state_ident(s_id);
-                quote!{ __State::#state => Some(#s) }
-            });
+        let match_arms = dfa.match_states().iter().map(|(&s_id, m_ids)| {
+            let s = m_ids
+                .iter()
+                .map(|id| self.scanner.matches()[*id])
+                .max_by_key(|m| m.1)
+                .unwrap()
+                .0;
+            let state = state_ident(s_id);
+            quote! { __State::#state => Some(#s) }
+        });
 
         quote! {
             fn match_id(state: __State) -> Option<u16> {

@@ -14,18 +14,18 @@ impl<A, B> Difference<A, B> {
 }
 
 impl<A, B> BitSetLike for Difference<A, B>
-    where A: BitSetLike, B: BitSetLike
+where
+    A: BitSetLike,
+    B: BitSetLike,
 {
     fn blocks(&self) -> impl Iterator<Item = BlockRepr> {
         let mut a_blocks = self.a.blocks();
         let mut b_blocks = self.b.blocks();
 
-        std::iter::from_fn(move || {
-            match (a_blocks.next(), b_blocks.next()) {
-                (None, _) => None,
-                (Some(b), None) => Some(b),
-                (Some(a), Some(b)) => Some(a & !b),
-            }
+        std::iter::from_fn(move || match (a_blocks.next(), b_blocks.next()) {
+            (None, _) => None,
+            (Some(b), None) => Some(b),
+            (Some(a), Some(b)) => Some(a & !b),
         })
     }
 
@@ -36,7 +36,7 @@ impl<A, B> BitSetLike for Difference<A, B>
 
 impl<T> Sub<T> for BitSet
 where
-    T: BitSetLike
+    T: BitSetLike,
 {
     type Output = Difference<BitSet, T>;
 

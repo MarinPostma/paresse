@@ -1,8 +1,8 @@
-use super::{BitSet, BlockRepr, IntoU32};
-use super::ops::union::Union;
-use super::ops::intersection::Intersection;
-use super::ops::difference::Difference;
 use super::blocks_iter::BlocksIter;
+use super::ops::difference::Difference;
+use super::ops::intersection::Intersection;
+use super::ops::union::Union;
+use super::{BitSet, BlockRepr, IntoU32};
 
 /// This trait represent types that behave like bitset, and operation that can be performed on them
 pub trait BitSetLike {

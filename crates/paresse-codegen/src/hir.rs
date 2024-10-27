@@ -1,5 +1,5 @@
-use std::fmt::Debug;
 use std::collections::HashMap;
+use std::fmt::Debug;
 
 use paresse_core::grammar::Symbol as SymbolId;
 use quote::ToTokens;
@@ -52,7 +52,13 @@ impl Debug for Rule {
         f.debug_struct("Rule")
             .field("lhs", &self.lhs)
             .field("rhs", &self.rhs)
-            .field("handler", &self.handler.as_ref().map(|h| h.to_token_stream().to_string()))
+            .field(
+                "handler",
+                &self
+                    .handler
+                    .as_ref()
+                    .map(|h| h.to_token_stream().to_string()),
+            )
             .finish()
     }
 }

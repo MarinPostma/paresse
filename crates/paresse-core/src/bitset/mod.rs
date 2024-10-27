@@ -1,12 +1,12 @@
-use std::iter::Copied;
 use std::fmt;
+use std::iter::Copied;
 
 pub use bitset_like::BitSetLike;
 pub use blocks_iter::BlocksIter;
 
 mod bitset_like;
-mod ops;
 mod blocks_iter;
+mod ops;
 
 /// Integer type used to represent a block
 type BlockRepr = u128;
@@ -25,7 +25,9 @@ impl IntoU32 for u32 {
 
 impl IntoU32 for i32 {
     fn into_u32(self) -> u32 {
-        if self < 0 { panic!("invalid conversion to u32") }
+        if self < 0 {
+            panic!("invalid conversion to u32")
+        }
         self as u32
     }
 }
@@ -52,9 +54,11 @@ impl BitSet {
 
     pub fn max(&self) -> Option<u32> {
         for (idx, block) in self.blocks.iter().enumerate().rev() {
-            if *block == 0 { continue }
+            if *block == 0 {
+                continue;
+            }
             let last_bit_offset = BlockRepr::BITS - block.leading_zeros() - 1;
-            return Some(idx as u32 * BlockRepr::BITS + last_bit_offset)
+            return Some(idx as u32 * BlockRepr::BITS + last_bit_offset);
         }
         None
     }
@@ -111,8 +115,7 @@ impl BitSet {
     fn merge_with<O, F>(&mut self, other: O, f: F)
     where
         O: BitSetLike,
-        F: Fn(Option<BlockRepr>, Option<BlockRepr>) -> Option<BlockRepr>
-    
+        F: Fn(Option<BlockRepr>, Option<BlockRepr>) -> Option<BlockRepr>,
     {
         let mut other_iter = other.blocks();
 
@@ -141,7 +144,6 @@ impl BitSetLike for BitSet {
         (self.blocks[block] & 1 << bit) != 0
     }
 }
-
 
 #[macro_export]
 macro_rules! bitset {

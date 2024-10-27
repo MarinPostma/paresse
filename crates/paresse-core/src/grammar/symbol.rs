@@ -56,7 +56,9 @@ impl Default for SymbolSource {
 
 impl SymbolSource {
     pub fn new() -> Self {
-        Self { current: Symbol::eof().as_u32() }
+        Self {
+            current: Symbol::eof().as_u32(),
+        }
     }
 }
 
@@ -90,13 +92,15 @@ impl SymbolSet {
     pub fn contains_epsilon(&self) -> bool {
         self.inner.contains(Symbol::epsilon())
     }
-    
+
     pub fn add(&mut self, s: Symbol) {
         self.inner.insert(s.as_u32())
     }
 
     pub fn difference(&self, other: &Self) -> Self {
-        Self { inner: self.inner.difference(&other.inner).collect() }
+        Self {
+            inner: self.inner.difference(&other.inner).collect(),
+        }
     }
 
     pub fn contains(&self, s: Symbol) -> bool {
@@ -149,6 +153,8 @@ impl BitOr for &SymbolSet {
     type Output = SymbolSet;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        SymbolSet { inner: &self.inner | &rhs.inner } 
+        SymbolSet {
+            inner: &self.inner | &rhs.inner,
+        }
     }
 }

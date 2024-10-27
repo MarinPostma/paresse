@@ -1,8 +1,8 @@
 //! This modules parses the content of the grammar macro into a raw GrammarAst, that can then be
 //! analyzed into a GrammarHir
-use syn::{braced, Expr, Ident, LitStr, Token};
 use syn::parse::Parse;
 use syn::token::Brace;
+use syn::{braced, Expr, Ident, LitStr, Token};
 
 #[derive(Clone, Debug)]
 pub enum TerminalKind {

@@ -23,7 +23,6 @@ impl RegexAst {
             RegexAst::Alt(lhs, rhs) => lhs.priority().min(rhs.priority()),
             RegexAst::Concat(lhs, rhs) => lhs.priority() + rhs.priority(),
         }
-
     }
 }
 

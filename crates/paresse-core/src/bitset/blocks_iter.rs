@@ -7,16 +7,22 @@ pub struct BlocksIter<I> {
 }
 
 impl<I> BlocksIter<I>
-    where I: Iterator<Item = BlockRepr>
+where
+    I: Iterator<Item = BlockRepr>,
 {
     pub fn new(mut it: I) -> Self {
-        let curr_block = it.next(); 
-        Self { it, curr_block_index: 0, curr_block }
+        let curr_block = it.next();
+        Self {
+            it,
+            curr_block_index: 0,
+            curr_block,
+        }
     }
 }
 
 impl<I> Iterator for BlocksIter<I>
-    where I: Iterator<Item = BlockRepr>
+where
+    I: Iterator<Item = BlockRepr>,
 {
     type Item = u32;
 
@@ -35,7 +41,7 @@ impl<I> Iterator for BlocksIter<I>
             let curr_block = self.curr_block.as_mut().unwrap();
             if *curr_block == 0 {
                 self.curr_block.take();
-                continue
+                continue;
             }
 
             // set all bits to 0 except for LSB
@@ -49,4 +55,3 @@ impl<I> Iterator for BlocksIter<I>
         }
     }
 }
-

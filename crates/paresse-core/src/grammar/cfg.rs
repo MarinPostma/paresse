@@ -235,7 +235,6 @@ impl FollowSets {
                 follow_sets.insert(nt, Default::default());
             }
         }
-        
 
         follow_sets
             .entry(grammar.start)
@@ -497,7 +496,10 @@ mod test {
         assert_eq!(&*follow[exprp], &bitset![eof, rparen]);
         assert_eq!(&*follow[term], &bitset![eof, rparen, plus, minus]);
         assert_eq!(&*follow[termp], &bitset![eof, rparen, plus, minus]);
-        assert_eq!(&*follow[factor], &bitset![eof, rparen, plus, minus, mult, div]);
+        assert_eq!(
+            &*follow[factor],
+            &bitset![eof, rparen, plus, minus, mult, div]
+        );
     }
 
     #[test]

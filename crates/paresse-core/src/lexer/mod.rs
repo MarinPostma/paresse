@@ -26,7 +26,10 @@ pub struct Span {
 
 impl Span {
     pub fn new(start: u32, end: u32) -> Self {
-        Self { offset: start, len: (end - start) as _ }
+        Self {
+            offset: start,
+            len: (end - start) as _,
+        }
     }
 }
 
@@ -62,12 +65,7 @@ impl ScannerBuilder {
         self.token_with_flags(pat, Flags::default().set_case_insensitive(true), kind)
     }
 
-    fn token_with_flags(
-        &mut self,
-        pat: &str,
-        flags: Flags,
-        token_kind: u16,
-    ) -> &mut Self {
+    fn token_with_flags(&mut self, pat: &str, flags: Flags, token_kind: u16) -> &mut Self {
         let config = Config::default().set_flags(flags);
         let parser = parser::Parser::new(config);
         let ast = parser.parse(pat);

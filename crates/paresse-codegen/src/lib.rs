@@ -1,10 +1,10 @@
-use proc_macro::TokenStream;
 use parse::GrammarAst;
+use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
-mod parse;
-mod hir;
 mod generate;
+mod hir;
+mod parse;
 
 #[proc_macro]
 pub fn grammar(input: TokenStream) -> TokenStream {
@@ -26,5 +26,6 @@ pub fn grammar(input: TokenStream) -> TokenStream {
             #lexer
             #parser
         }
-    }.into()
+    }
+    .into()
 }
