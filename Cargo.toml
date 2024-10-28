@@ -14,5 +14,5 @@ members = [
     "crates/paresse-codegen",
 ]
 exclude = [
-    "examples/ll1",
+    "examples/calc",
 ]

@@ -1,5 +1,5 @@
 [package]
-name = "ll1"
+name = "calc"
 version = "0.1.0"
 edition = "2021"
 
