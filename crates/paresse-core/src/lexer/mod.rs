@@ -7,6 +7,7 @@ use parser::{Config, Flags};
 mod alphabet;
 mod ast;
 mod dfa;
+pub mod error;
 mod nfa;
 mod parser;
 

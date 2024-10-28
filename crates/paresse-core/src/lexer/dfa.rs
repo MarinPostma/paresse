@@ -86,10 +86,6 @@ impl DFA {
         s / self.transitions.stride
     }
 
-    pub(crate) fn matches(&self, state: StateId) -> Option<&[usize]> {
-        self.match_states.get(&state).map(|v| &**v)
-    }
-
     pub fn transition(&self, from: StateId, u: Unit) -> Option<StateId> {
         let offset = self.class_map.offset(u)?;
         let id = self.transitions.tt[from + offset];

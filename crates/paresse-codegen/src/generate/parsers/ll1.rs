@@ -32,16 +32,22 @@ impl<'a> AugmentedRule<'a> {
         let sym_action = |s: &Symbol| match s {
             Symbol::Terminal(Terminal {
                 sym_id,
-                kind: TerminalKind::Pattern(pat),
+                kind: TerminalKind::Pattern(_),
             }) => {
                 let id = sym_id.as_u32() as u16;
                 quote! {
                     {
-                       let t = self.advance();
+                       let t = self.advance()?;
                         match t {
                             Some(t) if t.kind == #id => self.tokens.lexeme(&t.span),
-                            Some(other) => panic!("expected {}, but found {}", #pat, self.tokens.lexeme(&other.span)),
-                            None => panic!("unexpected eof"),
+                            Some(other) => {
+                                Err(
+                                        paresse::ParseError::Expected {
+                                            expected: &[#id],
+                                            found: other,
+                                })?
+                            },
+                            None => Err(paresse::ParseError::UnexpectedEof)?,
                         }
                     }
                 }
@@ -55,7 +61,7 @@ impl<'a> AugmentedRule<'a> {
             Symbol::NonTerminal(ref nt) => {
                 let f = parse_fn_name(&nt.name);
                 quote! {
-                    self.#f()
+                    self.#f()?
                 }
             }
         };
@@ -80,10 +86,10 @@ impl<'a> AugmentedRule<'a> {
     fn ret_block(&self) -> impl ToTokens {
         match self.rule.handler {
             Some(ref e) => {
-                quote! { return #e }
+                quote! { return Ok(#e) }
             }
             None => {
-                quote! { return std::default::Default::default() }
+                quote! { return Ok(std::default::Default::default()) }
             }
         }
     }
@@ -144,7 +150,7 @@ impl<'a> ParseFn<'a> {
         let fn_ret_ty = &self.nt.name;
         let fn_body = self.generate_fn_body();
         quote! {
-            fn #fn_name(&mut self) -> #fn_ret_ty {
+            fn #fn_name(&mut self) -> Result<#fn_ret_ty, paresse::Error> {
                 #fn_body
             }
         }
@@ -160,7 +166,6 @@ impl<'a> ParseFn<'a> {
     }
 
     fn generate_fallback(&self) -> impl ToTokens {
-        let rule = self.nt.name.to_string();
         let mut firsts = self
             .rules
             .iter()
@@ -176,19 +181,18 @@ impl<'a> ParseFn<'a> {
                 .iter()
                 .find(|(_, s)| *s == &t)
                 .unwrap()
-                .0
-                .as_str()
+                .1
+                .as_u32() as u16
         });
-        let expected = quote! {
-            #(#firsts),*
-        }
-        .to_string();
         quote! {
             match self.peek() {
-                Some(tt) => {
-                    panic!("expected one of {}, but found {}", #expected, self.tokens.lexeme(&tt.span));
+                Some(&found) => {
+                    Err(paresse::ParseError::Expected {
+                        expected: &[#(#firsts),*],
+                        found,
+                    })?
                 }
-                None => panic!("unexpected EOF while parsing {}", #rule)
+                None => Err(paresse::ParseError::UnexpectedEof)?
             }
         }
     }
@@ -214,18 +218,18 @@ impl<'g> Ll1Generator<'g> {
         quote! {
             pub struct Parser<'a> {
                 tokens: Scan<'a>,
-                current: Option<paresse::core::lexer::Token>,
+                current: Option<paresse::Token>,
             }
 
             impl<'a> Parser<'a> {
-                fn peek(&self) -> Option<&paresse::core::lexer::Token> {
+                fn peek(&self) -> Option<&paresse::Token> {
                     self.current.as_ref()
                 }
 
-                fn advance(&mut self) -> Option<paresse::core::lexer::Token> {
+                fn advance(&mut self) -> Result<Option<paresse::Token>, paresse::Error> {
                     let current = self.current.take();
-                    self.current = self.tokens.next();
-                    current
+                    self.current = self.tokens.next().transpose()?;
+                    Ok(current)
                 }
 
                 #parse_root_fn
@@ -236,9 +240,9 @@ impl<'g> Ll1Generator<'g> {
 
     fn parse_fns(&self) -> impl Iterator<Item = ParseFn> {
         self.augmented_rules()
-            .fold(HashMap::new(), |mut agg, r| {
+            .fold(HashMap::<_, Vec<_>>::new(), |mut agg, r| {
                 agg.entry(&r.rule.lhs().name)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(r);
                 agg
             })
@@ -273,9 +277,9 @@ impl<'g> Ll1Generator<'g> {
         let root_fn_name = parse_fn_name(root_ty);
 
         quote! {
-            pub fn parse(s: &'a str) -> #root_ty {
+            pub fn parse(s: &'a str) -> Result<#root_ty, paresse::Error> {
                 let mut tokens = Scan::new(s);
-                let current = tokens.next();
+                let current = tokens.next().transpose()?;
                 let mut parser = Self {
                         tokens,
                         current,

@@ -7,21 +7,20 @@ use syn::Ident;
 
 use crate::hir::GrammarHir;
 
-pub struct LexerGenerator<'g> {
+pub struct LexerGenerator {
     scanner: Scanner,
-    grammar: &'g GrammarHir,
 }
 
-impl<'g> ToTokens for LexerGenerator<'g> {
+impl ToTokens for LexerGenerator {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         self.generate().to_tokens(tokens)
     }
 }
 
-impl<'g> LexerGenerator<'g> {
-    pub fn new(grammar: &'g GrammarHir) -> Self {
+impl LexerGenerator {
+    pub fn new(grammar: &GrammarHir) -> Self {
         let scanner = build_scanner(grammar);
-        Self { scanner, grammar }
+        Self { scanner }
     }
 
     fn generate(&self) -> impl ToTokens {
@@ -43,13 +42,14 @@ impl<'g> LexerGenerator<'g> {
             }
 
             impl<'a> Iterator for Scan<'a> {
-                type Item = paresse::core::lexer::Token;
+                type Item = Result<paresse::Token, paresse::ScanError>;
 
                 fn next(&mut self) -> Option<Self::Item> {
                     loop {
                         match self.next_token() {
-                            Some(t) if t.kind == u16::MAX => continue,
-                            Some(t) => return Some(t),
+                            /// u16::MAX is a sink token
+                            Some(Ok(t)) if t.kind == u16::MAX => continue,
+                            Some(r) => return Some(r),
                             None => return None,
                         }
                     }
@@ -67,17 +67,18 @@ impl<'g> LexerGenerator<'g> {
                     }
                 }
 
-                fn lexeme(&self, s: &paresse::core::lexer::Span) -> &str {
+                fn lexeme(&self, s: &paresse::Span) -> &str {
                     &self.input[s.offset as usize..s.offset as usize + s.len as usize]
                 }
 
-                fn next_token(&mut self) -> Option<paresse::core::lexer::Token> {
+                fn next_token(&mut self) -> Option<Result<paresse::Token, paresse::ScanError>> {
                     if self.input.is_empty() {
                         return None;
                     }
                     self.reset();
                     while self.sp < self.input.len() {
-                        let u = paresse::core::lexer::Unit::Byte(self.input.as_bytes()[self.sp]);
+                        let c = self.input.as_bytes()[self.sp];
+                        let u = paresse::Unit::Byte(c);
                         match self.transition(u) {
                             Some(new_state) => {
                                 self.state = new_state;
@@ -87,15 +88,15 @@ impl<'g> LexerGenerator<'g> {
                                     self.match_info = (self.sp, id);
                                 }
                             },
-                            None if self.has_match() => return Some(self.cut_match()),
+                            None if self.has_match() => return Some(Ok(self.cut_match())),
                             None => {
-                                panic!("here");
+                                return Some(Err(paresse::ScanError::new(self.sp, paresse::ScanErrorKind::UnexpectedChar(c))))
                             },
                         }
                     }
 
                     if self.has_match() {
-                        Some(self.cut_match())
+                        Some(Ok(self.cut_match()))
                     } else {
                         None
                     }
@@ -108,7 +109,7 @@ impl<'g> LexerGenerator<'g> {
                 fn reset(&mut self) {
                     self.state = #start_state;
 
-                    if let Some(state) = self.transition(paresse::core::lexer::Unit::Boi) {
+                    if let Some(state) = self.transition(paresse::Unit::Boi) {
                         self.state = state;
                     }
 
@@ -124,11 +125,11 @@ impl<'g> LexerGenerator<'g> {
                     &self.input.as_bytes()[self.start..]
                 }
 
-                fn cut_match(&mut self) -> paresse::core::lexer::Token {
+                fn cut_match(&mut self) -> paresse::Token {
                     let kind = self.match_info.1;
-                    let token = paresse::core::lexer::Token {
+                    let token = paresse::Token {
                         kind,
-                        span: paresse::core::lexer::Span::new(self.start as u32, self.match_info.0 as u32),
+                        span: paresse::Span::new(self.start as u32, self.match_info.0 as u32),
                     };
 
                     self.start = self.match_info.0;
@@ -162,9 +163,9 @@ impl<'g> LexerGenerator<'g> {
             let pat = state_ident(state);
             let inner_arms = targets.iter().map(|(target, units)| {
                 let pats = units.iter().map(|u| match u {
-                    Unit::Boi => quote!(paresse::core::lexer::Unit::Boi),
-                    Unit::Eoi => quote!(paresse::core::lexer::Unit::Eoi),
-                    Unit::Byte(i) => quote!(paresse::core::lexer::Unit::Byte(#i)),
+                    Unit::Boi => quote!(paresse::Unit::Boi),
+                    Unit::Eoi => quote!(paresse::Unit::Eoi),
+                    Unit::Byte(i) => quote!(paresse::Unit::Byte(#i)),
                 });
 
                 let target = state_ident(*target);
@@ -185,7 +186,7 @@ impl<'g> LexerGenerator<'g> {
         }
 
         quote! {
-            fn transition(&self, u: paresse::core::lexer::Unit) -> Option<__State> {
+            fn transition(&self, u: paresse::Unit) -> Option<__State> {
                 match self.state {
                     #(#arms,)*
                 }

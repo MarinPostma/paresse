@@ -116,6 +116,6 @@ paresse::grammar! {
 
 fn main() {
     let expr = std::env::args().skip(1).collect::<String>();
-    let res = parser::Parser::parse(&expr).0.eval();
+    let res = parser::Parser::parse(&expr).unwrap().0.eval();
     println!("{expr} = {res}");
 }
