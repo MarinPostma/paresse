@@ -241,9 +241,7 @@ impl<'g> Ll1Generator<'g> {
     fn parse_fns(&self) -> impl Iterator<Item = ParseFn> {
         self.augmented_rules()
             .fold(HashMap::<_, Vec<_>>::new(), |mut agg, r| {
-                agg.entry(&r.rule.lhs().name)
-                    .or_default()
-                    .push(r);
+                agg.entry(&r.rule.lhs().name).or_default().push(r);
                 agg
             })
             .into_values()
