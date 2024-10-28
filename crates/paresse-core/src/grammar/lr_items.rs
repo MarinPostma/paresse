@@ -1,9 +1,11 @@
-use hashbrown::HashSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
+
+use crate::bitset::BitSet;
 
 use super::{Grammar, Symbol, SymbolSet};
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-struct LrItem {
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+pub struct LrItem {
     /// rule id in the grammar
     rule: usize,
     /// position of the placeholder in the rule, iow, the current position in rule.rhs in a derivation of
@@ -15,7 +17,7 @@ struct LrItem {
 }
 
 impl LrItem {
-    fn new(rule: usize, placeholder: usize, lookahead: Symbol) -> Self {
+    pub fn new(rule: usize, placeholder: usize, lookahead: Symbol) -> Self {
         Self {
             rule,
             placeholder,
@@ -24,14 +26,14 @@ impl LrItem {
     }
     /// Returns the symbol immediately to the right of this item's placeholder. If None is
     /// returned, then the placeholder is past the end of the production
-    fn placeholder_right(&self, grammar: &Grammar) -> Option<Symbol> {
+    pub fn placeholder_right(&self, grammar: &Grammar) -> Option<Symbol> {
         let rule = &grammar.rules()[self.rule];
         debug_assert!(self.placeholder <= rule.rhs().len());
         rule.rhs().get(self.placeholder).copied()
     }
 
     /// compute first(da), for the item's rule in the form [A -> B.Cd, a]
-    fn first_detla(&self, grammar: &Grammar) -> SymbolSet {
+    pub fn first_detla(&self, grammar: &Grammar) -> SymbolSet {
         let c = grammar.rules()[self.rule]
             .rhs()
             .iter()
@@ -41,7 +43,8 @@ impl LrItem {
         grammar.first_sets().first_concat(c)
     }
 
-    fn advance(&self) -> Self {
+    /// returns a new LrItem with the placeholder advanced by one symbol
+    pub fn advance(&self) -> Self {
         Self {
             placeholder: self.placeholder + 1,
             ..*self
@@ -49,9 +52,9 @@ impl LrItem {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct LrItems {
-    items: HashSet<LrItem>,
+    items: BTreeSet<LrItem>,
 }
 
 impl LrItems {
@@ -73,10 +76,25 @@ impl LrItems {
         self.items.len()
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &LrItem> {
+        self.items.iter()
+    }
+
+    fn placeholder_righthands(&self, grammar: &Grammar) -> SymbolSet {
+        let mut set = SymbolSet::new();
+        for item in &self.items {
+            match item.placeholder_right(grammar) {
+                Some(s) => set.insert(s),
+                _ => (),
+            }
+        }
+
+        set
+    }
+
     /// given self, and a terminal symbol s, compute a model of the state of the parser after
     /// recognizing a s.
     pub fn goto(&self, grammar: &Grammar, s: Symbol) -> Self {
-        assert!(grammar.is_terminal(s));
         let mut moved = Self::default();
         for item in &self.items {
             if item.placeholder_right(grammar) == Some(s) {
@@ -100,8 +118,7 @@ impl LrItems {
             if let Some(right_symbol) = item.placeholder_right(grammar) {
                 let firsts = item.first_detla(grammar);
                 if grammar.is_non_terminal(right_symbol) {
-                    let rules = grammar
-                        .rules_for(right_symbol);
+                    let rules = grammar.rules_for(right_symbol);
                     for (rule_idx, _) in rules {
                         for lookahead in &firsts {
                             let item = LrItem::new(rule_idx, 0, lookahead);
@@ -113,6 +130,71 @@ impl LrItems {
                 }
             }
         }
+    }
+}
+
+pub struct CanonicalCollection {
+    sets: Vec<LrItems>,
+    transitions: HashMap<u32, HashMap<Symbol, u32>>,
+}
+
+impl CanonicalCollection {
+    pub fn compute(grammar: &Grammar) -> Self {
+        let mut sets = vec![Self::compute_cc0(grammar)];
+        let mut unmarked = BitSet::from_iter([0]);
+        let mut transitions: HashMap<_, HashMap<_, _>> = HashMap::new();
+        while let Some(from) = unmarked.first() {
+            unmarked.remove(from);
+            let terminals = sets[from as usize].placeholder_righthands(grammar);
+            for terminal in &terminals {
+                let tmp = sets[from as usize].goto(grammar, terminal);
+                let to = match Self::insert(&mut sets, tmp) {
+                    Ok(id) => {
+                        unmarked.insert(id);
+                        id
+                    },
+                    Err(id) => {
+                        id
+                    }
+                };
+
+                if let Some(other) = transitions.entry(from).or_default().insert(terminal, to) {
+                    panic!("conflicting grammar rules for `{terminal:?}`: [{from} -> {to}], [{from} -> {other}]");
+                }
+            }
+        }
+
+        Self { sets, transitions }
+    }
+
+    fn insert(sets: &mut Vec<LrItems>, s: LrItems) -> Result<u32, u32> {
+        match dbg!(Self::id(sets, &s)) {
+            Some(id) => Err(id),
+            None => {
+                let id = sets.len() as u32;
+                sets.push(s);
+                Ok(id)
+            }
+        }
+    }
+
+    fn id(sets: &[LrItems], set: &LrItems) -> Option<u32> {
+        sets.iter()
+            .enumerate()
+            .find_map(|(i, s)| (s == set).then_some(i as u32))
+    }
+
+    fn compute_cc0(grammar: &Grammar) -> LrItems {
+        let cc0_items = grammar
+            .rules_for(grammar.start())
+            .map(|(idx, _)| LrItem::new(idx, 0, Symbol::eof()));
+        let mut cc0 = LrItems::from_iter(cc0_items);
+        cc0.closure(grammar);
+        cc0
+    }
+
+    pub fn len(&self) -> usize {
+        self.sets.len()
     }
 }
 
@@ -205,5 +287,32 @@ mod test {
         assert!(goto.contains(&LrItem::new(4, 1, lparen)));
         assert!(goto.contains(&LrItem::new(3, 0, rparen)));
         assert!(goto.contains(&LrItem::new(4, 0, rparen)));
+    }
+
+    #[test]
+    fn canonical_collection() {
+        let mut builder = grammar::Builder::new();
+        let [
+        goal, // 2
+        list, // 3
+        pair, //4
+        lparen, //5
+        rparen, // 6
+    ] = builder.syms();
+        builder.rule(goal).is([list]); // 0
+        builder
+            .rule(list)
+            .is([list, pair]) // 1
+            .is([pair]); // 2
+        builder
+            .rule(pair)
+            .is([lparen, pair, rparen]) // 3
+            .is([lparen, rparen]); // 4
+
+        let grammar = builder.build(None);
+
+        let cc = CanonicalCollection::compute(&grammar);
+
+        assert_eq!(cc.len(), 12);
     }
 }

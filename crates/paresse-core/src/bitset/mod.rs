@@ -129,6 +129,19 @@ impl BitSet {
             idx += 1;
         }
     }
+    
+    pub fn from_iter(i: impl IntoIterator<Item = u32>) -> Self {
+        let mut set = Self::new();
+        for n in i {
+            set.insert(n);
+        }
+        set
+    }
+
+    /// Returns the first item in this bitset
+    pub fn first(&self) -> Option<u32> {
+        self.iter().next()
+    }
 }
 
 impl BitSetLike for BitSet {
