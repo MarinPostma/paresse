@@ -191,6 +191,11 @@ impl Grammar {
         &self.rules
     }
 
+    /// Returns all the rules (and index) that have s as a lhs
+    pub fn rules_for(&self, s: Symbol) -> impl Iterator<Item = (usize, &Rule)> + '_ {
+        self.rules.iter().enumerate().filter(move |(_, r)| r.lhs() == s)
+    }
+
     /// Returns all the symbols defined for this grammar
     pub fn symbols(&self) -> &SymbolSet {
         &self.symbols
@@ -214,8 +219,12 @@ impl Grammar {
         self.start
     }
 
-    pub(crate) fn is_non_terminal(&self, s: Symbol) -> bool {
+    pub fn is_non_terminal(&self, s: Symbol) -> bool {
         self.non_terminals.contains(s)
+    }
+
+    pub(crate) fn is_terminal(&self, s: Symbol) -> bool {
+        self.terminals.contains(s)
     }
 }
 
