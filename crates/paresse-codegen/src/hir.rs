@@ -92,6 +92,11 @@ impl<'a> GrammarBuilder<'a> {
     }
 
     pub fn build(mut self) -> syn::Result<GrammarHir> {
+        // forward-define non-terminals, so that the Ident span points to the rule definition
+        self.ast.rules().iter().for_each(|r| {
+            self.get_non_terminal_symbol(r.lhs());
+        });
+
         for rule in self.ast.rules() {
             let sym_id = self.get_non_terminal_symbol(rule.lhs());
             let lhs = NonTerminal {

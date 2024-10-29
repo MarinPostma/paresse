@@ -1,8 +1,9 @@
 use std::collections::{BTreeSet, HashMap};
 
-use crate::bitset::BitSet;
-
-use super::{Grammar, Symbol, SymbolSet};
+use crate::{
+    bitset::BitSet,
+    grammar::{Grammar, Symbol, SymbolSet},
+};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub struct LrItem {
@@ -62,18 +63,16 @@ impl LrItems {
         Default::default()
     }
 
-    pub fn from_iter(i: impl IntoIterator<Item = LrItem>) -> Self {
-        Self {
-            items: i.into_iter().collect(),
-        }
-    }
-
     pub fn contains(&self, i: &LrItem) -> bool {
         self.items.contains(i)
     }
 
     pub fn len(&self) -> usize {
         self.items.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &LrItem> {
@@ -83,9 +82,8 @@ impl LrItems {
     fn placeholder_righthands(&self, grammar: &Grammar) -> SymbolSet {
         let mut set = SymbolSet::new();
         for item in &self.items {
-            match item.placeholder_right(grammar) {
-                Some(s) => set.insert(s),
-                _ => (),
+            if let Some(s) = item.placeholder_right(grammar) {
+                set.insert(s)
             }
         }
 
@@ -129,6 +127,14 @@ impl LrItems {
                     }
                 }
             }
+        }
+    }
+}
+
+impl FromIterator<LrItem> for LrItems {
+    fn from_iter<T: IntoIterator<Item = LrItem>>(iter: T) -> Self {
+        Self {
+            items: iter.into_iter().collect(),
         }
     }
 }
@@ -193,6 +199,14 @@ impl CanonicalCollection {
 
     pub fn len(&self) -> usize {
         self.sets.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn transition(&self, from: u32, s: Symbol) -> Option<u32> {
+        self.transitions.get(&from).and_then(|t| t.get(&s).copied())
     }
 }
 

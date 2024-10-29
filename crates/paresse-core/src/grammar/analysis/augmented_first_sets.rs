@@ -2,8 +2,6 @@ use std::ops::Index;
 
 use crate::grammar::{Grammar, SymbolSet};
 
-use super::{FirstSets, FollowSets};
-
 #[derive(Debug)]
 pub struct AugmentedFirstSets {
     inner: Vec<SymbolSet>,
@@ -18,13 +16,13 @@ impl Index<usize> for AugmentedFirstSets {
 }
 
 impl AugmentedFirstSets {
-    pub fn compute(grammar: &Grammar, first_sets: &FirstSets, follow_sets: &FollowSets) -> Self {
+    pub fn compute(grammar: &Grammar) -> Self {
         let mut inner = Vec::new();
 
         for rule in grammar.rules() {
-            let first = first_sets.first_concat(rule.rhs().iter().copied());
+            let first = grammar.first_sets().first_concat(rule.rhs().iter().copied());
             let aug = if first.contains_epsilon() {
-                &first | follow_sets.follow(rule.lhs())
+                &first | grammar.follow_sets().follow(rule.lhs())
             } else {
                 first
             };
@@ -39,20 +37,10 @@ impl AugmentedFirstSets {
         &self.inner[rule]
     }
 
-    // /// Returns whether the grammar is backtrack free
-    // pub fn is_backtrack_free(&self) -> bool {
-    //     for (sym, rules) in &self.inner {
-    //         for (idx, lhs) in rules.iter().take(rules.len() - 1).enumerate() {
-    //             for rhs in &rules[idx + 1..] {
-    //                 if !rhs.intersection(&**lhs).is_empty() {
-    //                     dbg!(sym, rhs, lhs);
-    //                     return false;
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     true
-    // }
+    pub fn iter(&self) -> impl Iterator<Item = &SymbolSet> {
+        self.inner.iter()
+    }
+
 }
 
 #[cfg(test)]

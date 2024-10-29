@@ -25,7 +25,7 @@ pub fn grammar(input: TokenStream) -> TokenStream {
 fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
     let grammar = crate::hir::GrammarBuilder::new(&ast).build()?;
     let lexer = generate::lexer::LexerGenerator::new(&grammar);
-    let parser = generate::parsers::ll1::Ll1Generator::new(&grammar);
+    let parser = generate::parsers::ll1::Ll1Generator::new(&grammar)?;
 
     Ok(quote::quote! {
         mod parser {

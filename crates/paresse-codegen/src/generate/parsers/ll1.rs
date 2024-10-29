@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use paresse_core::grammar::AugmentedFirstSets;
 use paresse_core::grammar::{Symbol as SymbolId, SymbolSet};
 use quote::{format_ident, quote, ToTokens};
 use syn::Ident;
@@ -12,7 +11,6 @@ use crate::{
 
 pub struct Ll1Generator<'g> {
     grammar: &'g GrammarHir,
-    firstp: AugmentedFirstSets,
 }
 
 impl<'g> ToTokens for Ll1Generator<'g> {
@@ -199,16 +197,18 @@ impl<'a> ParseFn<'a> {
 }
 
 impl<'g> Ll1Generator<'g> {
-    pub fn new(grammar: &'g GrammarHir) -> Self {
-        let first_sets = grammar.grammar().first_sets();
-        let follow_sets = grammar.grammar().follow_sets();
-        let firstp = grammar
-            .grammar()
-            .augmented_first_set(&first_sets, &follow_sets);
+    pub fn new(grammar: &'g GrammarHir) -> syn::Result<Self> {
+        if let Err((sym, _ambi)) = grammar.grammar().is_backtrack_free() {
+            let rule = grammar
+                .non_terminal_mapper()
+                .iter()
+                .find_map(|(id, s)| (*s == sym).then_some(id))
+                .unwrap();
 
-        // TODO: verify that the grammar is indeed predictive
+            return Err(syn::Error::new_spanned(rule, format_args!("grammar is not backtack free, `{rule}` can not be disambiguished with a lookahead of 1. Transform the grammar to be backtrack free, or use a more general parser flavor such as lr1")));
+        }
 
-        Self { grammar, firstp }
+        Ok(Self { grammar })
     }
 
     pub fn generate(&self) -> impl ToTokens {
@@ -259,7 +259,7 @@ impl<'g> Ll1Generator<'g> {
             .enumerate()
             .map(|(i, r)| AugmentedRule {
                 rule: r,
-                first_set: self.firstp.first_p(i),
+                first_set: self.grammar.grammar().augmented_first_set().first_p(i),
             })
     }
 

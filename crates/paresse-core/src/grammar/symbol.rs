@@ -81,6 +81,10 @@ impl SymbolSet {
         Self::default()
     }
 
+    pub fn from_bitset(b: BitSet) -> Self {
+        Self { inner: b }
+    }
+
     pub fn add_epsilon(&mut self) {
         self.inner.insert(Symbol::epsilon());
     }

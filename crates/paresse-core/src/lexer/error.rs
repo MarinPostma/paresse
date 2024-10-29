@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[derive(Debug)]
 pub struct ScanError {
     /// offset in the source of the tokenizer error
