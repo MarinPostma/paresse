@@ -114,6 +114,9 @@ impl<'a> GrammarBuilder<'a> {
                         })
                     }
                     SymbolKind::Nonterminal(nt) => {
+                        if !self.contains_non_terminal(nt) {
+                            return Err(syn::Error::new_spanned(nt, format_args!("no definition for rule `{nt}`")))
+                        }
                         let sym_id = self.get_non_terminal_symbol(nt);
                         Symbol::NonTerminal(NonTerminal {
                             sym_id,
@@ -173,6 +176,10 @@ impl<'a> GrammarBuilder<'a> {
                 id
             }
         }
+    }
+
+    fn contains_non_terminal(&self, rule_name: &Ident) -> bool {
+        self.non_terminal_mapper.contains_key(rule_name)
     }
 
     fn get_terminal_sym(&mut self, t: &TerminalKind) -> SymbolId {

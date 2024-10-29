@@ -20,29 +20,8 @@ type ArgList = u64;
 type MoreArgs = u64;
 
 paresse::grammar! {
-    #![config(parser_flavor = lr1, goal = Factor)]
-    Expr = Term Exprp;
-    Exprp = {
-        "+" Term Exprp,
-        "-" Term Exprp,
-        "",
-    };
-    Term = Factor Termp;
-    Termp = {
-        "\\*" Factor Termp,
-        "/" Factor Termp,
-        "",
-    };
-    Factor = {
-        Name,
-        Name "\\[" ArgList "\\]",
-        Name "\\(" ArgList "\\)",
-    };
-    ArgList = Expr MoreArgs;
-    MoreArgs = { 
-        "." Expr MoreArgs,
-        "",
-    };
+    #![config(parser_flavor = lr1, goal = Expr)]
+    Expr = Term;
 }
 
 fn main() {
