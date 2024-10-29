@@ -70,7 +70,7 @@ impl Rule {
 }
 
 pub struct GrammarBuilder<'a> {
-    raw: &'a GrammarAst,
+    ast: &'a GrammarAst,
     builder: paresse_core::grammar::Builder,
     /// maps rule name to rule id
     non_terminal_mapper: HashMap<Ident, SymbolId>,
@@ -83,7 +83,7 @@ pub struct GrammarBuilder<'a> {
 impl<'a> GrammarBuilder<'a> {
     pub fn new(raw: &'a GrammarAst) -> Self {
         Self {
-            raw,
+            ast: raw,
             builder: paresse_core::grammar::Builder::new(),
             non_terminal_mapper: HashMap::new(),
             terminal_mapper: HashMap::new(),
@@ -91,8 +91,8 @@ impl<'a> GrammarBuilder<'a> {
         }
     }
 
-    pub fn build(mut self) -> GrammarHir {
-        for rule in self.raw.rules() {
+    pub fn build(mut self) -> syn::Result<GrammarHir> {
+        for rule in self.ast.rules() {
             let sym_id = self.get_non_terminal_symbol(rule.lhs());
             let lhs = NonTerminal {
                 sym_id,
@@ -137,12 +137,26 @@ impl<'a> GrammarBuilder<'a> {
             self.rules.push(rule);
         }
 
-        GrammarHir {
+        let goal = match self.ast.config().goal {
+            Some(ref g) => {
+                match self.non_terminal_mapper.get(g) {
+                    Some(s) => Some(*s),
+                    None => {
+                        // TODO: check non-terminals too and report error when we support named
+                        // terminals
+                        return Err(syn::Error::new_spanned(g, format_args!("`{g}` is not a grammar rule")));
+                    }
+                }
+            }
+            None => None,
+        };
+
+        Ok(GrammarHir {
             rules: self.rules,
             non_terminal_mapper: self.non_terminal_mapper,
             terminal_mapper: self.terminal_mapper,
-            grammar: self.builder.build(None),
-        }
+            grammar: self.builder.build(goal),
+        })
     }
 
     fn get_non_terminal_symbol(&mut self, rule_name: &Ident) -> SymbolId {

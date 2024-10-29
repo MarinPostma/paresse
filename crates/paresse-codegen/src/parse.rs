@@ -3,9 +3,8 @@
 use quote::ToTokens;
 use syn::parse::Parse;
 use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
 use syn::token::Brace;
-use syn::{braced, parse_macro_input, Attribute, Expr, Ident, LitStr, MetaNameValue, Token};
+use syn::{braced, Attribute, Expr, Ident, LitStr, MetaNameValue, Token};
 
 use crate::config::{Config, ParserFlavor};
 
@@ -143,6 +142,10 @@ impl GrammarAst {
     pub fn rules(&self) -> &[Rule] {
         &self.rules
     }
+
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
 }
 
 fn parse_rule(input: syn::parse::ParseStream, rules: &mut Vec<Rule>) -> syn::Result<()> {
@@ -203,7 +206,18 @@ fn parse_config(input: syn::parse::ParseStream, config: &mut Config) -> syn::Res
                         _ => {
                             return Err(syn::Error::new_spanned(
                                 &entry.value,
-                                format_args!("parser flavor must be one of `ll1`, `lr1`"),
+                                format_args!("parser_flavor must be one of `ll1`, `lr1`"),
+                            ))
+                        }
+                    },
+                    "goal" => match entry.value {
+                        Expr::Path(p) if p.path.segments.len() == 1 => {
+                            config.goal = Some(p.path.segments.first().unwrap().ident.clone());
+                        }
+                        _ => {
+                            return Err(syn::Error::new_spanned(
+                                &entry.value,
+                                format_args!("goal must be the type name for a rule of the grammar"),
                             ))
                         }
                     },

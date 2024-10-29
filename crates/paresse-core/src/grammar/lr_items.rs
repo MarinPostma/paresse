@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 use crate::bitset::BitSet;
 
@@ -152,10 +152,8 @@ impl CanonicalCollection {
                     Ok(id) => {
                         unmarked.insert(id);
                         id
-                    },
-                    Err(id) => {
-                        id
                     }
+                    Err(id) => id,
                 };
 
                 if let Some(other) = transitions.entry(from).or_default().insert(terminal, to) {

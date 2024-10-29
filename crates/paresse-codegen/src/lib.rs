@@ -15,12 +15,19 @@ pub fn grammar(input: TokenStream) -> TokenStream {
         hook(info)
     }));
 
-    let parsed = parse_macro_input!(input as GrammarAst);
-    let grammar = crate::hir::GrammarBuilder::new(&parsed).build();
+    let ast = parse_macro_input!(input as GrammarAst);
+    match grammar_inner(ast) {
+        Ok(out) => out,
+        Err(e) => e.to_compile_error().into(),
+    }
+}
+
+fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
+    let grammar = crate::hir::GrammarBuilder::new(&ast).build()?;
     let lexer = generate::lexer::LexerGenerator::new(&grammar);
     let parser = generate::parsers::ll1::Ll1Generator::new(&grammar);
 
-    quote::quote! {
+    Ok(quote::quote! {
         mod parser {
             #![allow(non_snake_case)]
             use super::*;
@@ -28,5 +35,5 @@ pub fn grammar(input: TokenStream) -> TokenStream {
             #parser
         }
     }
-    .into()
+    .into())
 }

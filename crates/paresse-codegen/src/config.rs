@@ -1,6 +1,9 @@
+use syn::Ident;
+
 #[derive(Debug, Default)]
 pub struct Config {
     pub parser_flavor: ParserFlavor,
+    pub goal: Option<Ident>,
 }
 
 /// The the type of parser to generate
