@@ -18,6 +18,7 @@ pub struct Grammar {
     terminals: OnceCell<Terminals>,
     non_terminals: OnceCell<NonTerminals>,
     augmented_first_sets: OnceCell<AugmentedFirstSets>,
+    canonical_collection: OnceCell<CanonicalCollection>,
 }
 
 impl Grammar {
@@ -111,6 +112,10 @@ impl Grammar {
             }
         }
         Ok(())
+    }
+
+    pub fn canonical_collection(&self) -> &CanonicalCollection {
+        self.canonical_collection.get_or_init(|| CanonicalCollection::compute(self))
     }
 }
 
