@@ -184,7 +184,7 @@ impl CanonicalCollection {
 
     fn compute_cc0(grammar: &Grammar) -> LrItems {
         let cc0_items = grammar
-            .rules_for(grammar.start())
+            .rules_for(grammar.goal())
             .map(|(idx, _)| LrItem::new(idx, 0, Symbol::eof()));
         let mut cc0 = LrItems::from_iter(cc0_items);
         cc0.closure(grammar);

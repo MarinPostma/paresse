@@ -1,4 +1,4 @@
-use super::cfg::Builder;
+use super::Builder;
 use super::symbol::Symbol;
 
 #[derive(Debug, Clone)]

@@ -268,7 +268,7 @@ impl<'g> Ll1Generator<'g> {
             .grammar
             .non_terminal_mapper()
             .iter()
-            .find(|(_, sym)| **sym == self.grammar.grammar().start())
+            .find(|(_, sym)| **sym == self.grammar.grammar().goal())
             .unwrap()
             .0;
 
