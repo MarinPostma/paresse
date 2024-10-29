@@ -15,4 +15,5 @@ members = [
 ]
 exclude = [
     "examples/calc",
+    "examples/calc_lr",
 ]

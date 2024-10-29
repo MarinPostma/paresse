@@ -5,6 +5,7 @@ use syn::parse_macro_input;
 mod generate;
 mod hir;
 mod parse;
+mod config;
 
 #[proc_macro]
 pub fn grammar(input: TokenStream) -> TokenStream {

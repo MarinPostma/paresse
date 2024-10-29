@@ -168,7 +168,7 @@ impl CanonicalCollection {
     }
 
     fn insert(sets: &mut Vec<LrItems>, s: LrItems) -> Result<u32, u32> {
-        match dbg!(Self::id(sets, &s)) {
+        match Self::id(sets, &s) {
             Some(id) => Err(id),
             None => {
                 let id = sets.len() as u32;

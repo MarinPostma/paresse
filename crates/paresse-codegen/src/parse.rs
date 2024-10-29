@@ -1,8 +1,13 @@
 //! This modules parses the content of the grammar macro into a raw GrammarAst, that can then be
 //! analyzed into a GrammarHir
+use quote::ToTokens;
 use syn::parse::Parse;
+use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
 use syn::token::Brace;
-use syn::{braced, Expr, Ident, LitStr, Token};
+use syn::{braced, parse_macro_input, Attribute, Expr, Ident, LitStr, MetaNameValue, Token};
+
+use crate::config::{Config, ParserFlavor};
 
 #[derive(Clone, Debug)]
 pub enum TerminalKind {
@@ -130,6 +135,7 @@ impl Rule {
 }
 
 pub struct GrammarAst {
+    config: Config,
     rules: Vec<Rule>,
 }
 
@@ -165,13 +171,75 @@ fn parse_rule(input: syn::parse::ParseStream, rules: &mut Vec<Rule>) -> syn::Res
     Ok(())
 }
 
+// TODO: cleanup this function
+fn parse_config(input: syn::parse::ParseStream, config: &mut Config) -> syn::Result<()> {
+    let attr = input.call(Attribute::parse_inner)?;
+    match &attr[0].meta {
+        syn::Meta::List(l) => {
+            if l.path.segments.len() != 1 || l.path.segments.first().unwrap().ident != "config" {
+                return Err(syn::Error::new_spanned(
+                    &l.path,
+                    "expect the attribute to be `config`",
+                ));
+            }
+
+            let entries = l.parse_args_with(
+                Punctuated::<MetaNameValue, Token![,]>::parse_separated_nonempty,
+            )?;
+
+            for entry in entries {
+                match entry.path.to_token_stream().to_string().as_str() {
+                    "parser_flavor" => match entry.value {
+                        Expr::Path(p)
+                            if ["ll1", "lr1"]
+                                .contains(&p.to_token_stream().to_string().as_str()) =>
+                        {
+                            match p.to_token_stream().to_string().as_str() {
+                                "ll1" => config.parser_flavor = ParserFlavor::Ll1,
+                                "lr1" => config.parser_flavor = ParserFlavor::Lr1,
+                                _ => unreachable!(),
+                            }
+                        }
+                        _ => {
+                            return Err(syn::Error::new_spanned(
+                                &entry.value,
+                                format_args!("parser flavor must be one of `ll1`, `lr1`"),
+                            ))
+                        }
+                    },
+                    o => {
+                        return Err(syn::Error::new_spanned(
+                            &entry.path,
+                            format_args!("unknown config attribute `{o}`"),
+                        ))
+                    }
+                }
+            }
+        }
+        _ => {
+            return Err(syn::Error::new_spanned(
+                &attr[0],
+                "global config must be in the form `#![config(..)]`",
+            ))
+        }
+    }
+    Ok(())
+}
+
 impl Parse for GrammarAst {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut rules = Vec::new();
-        while input.peek(Ident) {
-            parse_rule(input, &mut rules)?;
+        let mut config = Config::default();
+        loop {
+            if input.peek(Token![#]) && input.peek2(Token![!]) {
+                parse_config(input, &mut config)?;
+            } else if input.peek(Token![#]) || input.peek(Ident) {
+                parse_rule(input, &mut rules)?;
+            } else {
+                break;
+            }
         }
 
-        Ok(Self { rules })
+        Ok(Self { rules, config })
     }
 }
