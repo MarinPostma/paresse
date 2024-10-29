@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use crate::{
     bitset::BitSet,
-    grammar::{Grammar, Symbol, SymbolSet},
+    grammar::{rule::Rule, Grammar, Symbol, SymbolSet},
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
@@ -51,6 +51,33 @@ impl LrItem {
             ..*self
         }
     }
+
+    fn rule<'a>(&self, g: &'a Grammar) -> &'a Rule {
+        &g.rules()[self.rule]
+    }
+
+    pub fn action(&self, g: &Grammar, from: u32) -> Action {
+        let cc = g.canonical_collection();
+        // this is a shift
+        if let Some(s) = self.placeholder_right(g) {
+            if let Some(to) = cc.transition(from, s) {
+                return Action::Shift { state: to, symbol: s }
+            }
+            Action::Error
+        } else if self.lookahead == Symbol::eof() && self.rule(g).lhs() == g.goal()  {
+            Action::Accept
+        } else {
+            Action::Reduce { rule: self.rule, symbol: self.lookahead }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    Shift { state: u32, symbol: Symbol },
+    Reduce { rule: usize, symbol: Symbol },
+    Accept,
+    Error,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -131,6 +158,16 @@ impl LrItems {
     }
 }
 
+impl<'a> IntoIterator for &'a LrItems {
+    type Item = <Self::IntoIter as Iterator>::Item;
+
+    type IntoIter = std::collections::btree_set::Iter<'a, LrItem>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.iter()
+    }
+}
+
 impl FromIterator<LrItem> for LrItems {
     fn from_iter<T: IntoIterator<Item = LrItem>>(iter: T) -> Self {
         Self {
@@ -169,6 +206,10 @@ impl CanonicalCollection {
         }
 
         Self { sets, transitions }
+    }
+
+    pub fn get(&self, i: u32) -> &LrItems {
+        &self.sets[i as usize]
     }
 
     fn insert(sets: &mut Vec<LrItems>, s: LrItems) -> Result<u32, u32> {

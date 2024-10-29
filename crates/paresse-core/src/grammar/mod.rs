@@ -210,6 +210,7 @@ impl Builder {
             terminals: OnceCell::new(),
             first_sets: OnceCell::new(),
             augmented_first_sets: OnceCell::new(),
+            canonical_collection: OnceCell::new(),
         }
     }
 }
