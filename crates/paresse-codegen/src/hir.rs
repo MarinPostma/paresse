@@ -115,7 +115,10 @@ impl<'a> GrammarBuilder<'a> {
                     }
                     SymbolKind::Nonterminal(nt) => {
                         if !self.contains_non_terminal(nt) {
-                            return Err(syn::Error::new_spanned(nt, format_args!("no definition for rule `{nt}`")))
+                            return Err(syn::Error::new_spanned(
+                                nt,
+                                format_args!("no definition for rule `{nt}`"),
+                            ));
                         }
                         let sym_id = self.get_non_terminal_symbol(nt);
                         Symbol::NonTerminal(NonTerminal {
@@ -152,7 +155,10 @@ impl<'a> GrammarBuilder<'a> {
                     None => {
                         // TODO: check non-terminals too and report error when we support named
                         // terminals
-                        return Err(syn::Error::new_spanned(g, format_args!("`{g}` is not a grammar rule")));
+                        return Err(syn::Error::new_spanned(
+                            g,
+                            format_args!("`{g}` is not a grammar rule"),
+                        ));
                     }
                 }
             }

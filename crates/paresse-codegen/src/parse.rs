@@ -217,7 +217,9 @@ fn parse_config(input: syn::parse::ParseStream, config: &mut Config) -> syn::Res
                         _ => {
                             return Err(syn::Error::new_spanned(
                                 &entry.value,
-                                format_args!("goal must be the type name for a rule of the grammar"),
+                                format_args!(
+                                    "goal must be the type name for a rule of the grammar"
+                                ),
                             ))
                         }
                     },

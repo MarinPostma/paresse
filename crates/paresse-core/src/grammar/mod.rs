@@ -2,8 +2,8 @@ mod analysis;
 mod rule;
 mod symbol;
 
-use std::collections::{hash_map::Entry, HashMap};
 use std::cell::OnceCell;
+use std::collections::{hash_map::Entry, HashMap};
 
 pub use analysis::*;
 use rule::{Rule, RuleBuilder};
@@ -101,13 +101,13 @@ impl Grammar {
                 Entry::Occupied(mut e) => {
                     let int = e.get() & &**syms;
                     if !int.is_empty() {
-                        return Err((rule.lhs(), SymbolSet::from_bitset(int)))
+                        return Err((rule.lhs(), SymbolSet::from_bitset(int)));
                     }
                     *e.get_mut() |= &**syms;
-                },
+                }
                 Entry::Vacant(e) => {
                     e.insert((**syms).clone());
-                },
+                }
             }
         }
         Ok(())

@@ -20,7 +20,9 @@ impl AugmentedFirstSets {
         let mut inner = Vec::new();
 
         for rule in grammar.rules() {
-            let first = grammar.first_sets().first_concat(rule.rhs().iter().copied());
+            let first = grammar
+                .first_sets()
+                .first_concat(rule.rhs().iter().copied());
             let aug = if first.contains_epsilon() {
                 &first | grammar.follow_sets().follow(rule.lhs())
             } else {
@@ -40,7 +42,6 @@ impl AugmentedFirstSets {
     pub fn iter(&self) -> impl Iterator<Item = &SymbolSet> {
         self.inner.iter()
     }
-
 }
 
 #[cfg(test)]

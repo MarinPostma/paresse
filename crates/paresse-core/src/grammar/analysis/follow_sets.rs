@@ -1,5 +1,5 @@
-use std::ops::Index;
 use std::collections::BTreeMap;
+use std::ops::Index;
 
 use crate::grammar::{Grammar, Symbol, SymbolSet};
 

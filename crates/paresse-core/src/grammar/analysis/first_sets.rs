@@ -1,11 +1,10 @@
-use std::ops::Index;
 use std::collections::BTreeMap;
+use std::ops::Index;
 
-use crate::grammar::{Symbol, SymbolSet};
 use crate::grammar::rule::Rule;
+use crate::grammar::{Symbol, SymbolSet};
 
 use super::{NonTerminals, Terminals};
-
 
 #[derive(Debug)]
 pub struct FirstSets {

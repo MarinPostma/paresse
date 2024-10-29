@@ -31,5 +31,3 @@ impl Terminals {
         Self { inner }
     }
 }
-
-

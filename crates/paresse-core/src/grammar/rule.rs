@@ -1,5 +1,5 @@
-use super::Builder;
 use super::symbol::Symbol;
+use super::Builder;
 
 #[derive(Debug, Clone)]
 pub struct Rule {

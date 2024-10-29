@@ -129,7 +129,7 @@ impl BitSet {
             idx += 1;
         }
     }
-    
+
     pub fn from_iter(i: impl IntoIterator<Item = u32>) -> Self {
         let mut set = Self::new();
         for n in i {
