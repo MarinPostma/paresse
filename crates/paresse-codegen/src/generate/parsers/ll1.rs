@@ -9,11 +9,11 @@ use crate::{
     parse::TerminalKind,
 };
 
-pub struct Ll1Generator<'g> {
+pub struct LL1Generator<'g> {
     grammar: &'g GrammarHir,
 }
 
-impl<'g> ToTokens for Ll1Generator<'g> {
+impl<'g> ToTokens for LL1Generator<'g> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         self.generate().to_tokens(tokens)
     }
@@ -196,7 +196,7 @@ impl<'a> ParseFn<'a> {
     }
 }
 
-impl<'g> Ll1Generator<'g> {
+impl<'g> LL1Generator<'g> {
     pub fn new(grammar: &'g GrammarHir) -> syn::Result<Self> {
         if let Err((sym, _ambi)) = grammar.grammar().is_backtrack_free() {
             let rule = grammar

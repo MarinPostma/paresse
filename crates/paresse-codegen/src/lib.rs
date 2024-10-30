@@ -1,5 +1,6 @@
 use parse::GrammarAst;
 use proc_macro::TokenStream;
+use quote::ToTokens;
 use syn::parse_macro_input;
 
 mod config;
@@ -25,7 +26,11 @@ pub fn grammar(input: TokenStream) -> TokenStream {
 fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
     let grammar = crate::hir::GrammarBuilder::new(&ast).build()?;
     let lexer = generate::lexer::LexerGenerator::new(&grammar);
-    let parser = generate::parsers::ll1::Ll1Generator::new(&grammar)?;
+
+    let parser: &dyn ToTokens = match ast.config().parser_flavor {
+        config::ParserFlavor::Ll1 => &generate::parsers::ll1::LL1Generator::new(&grammar)?,
+        config::ParserFlavor::Lr1 => &generate::parsers::lr1::LR1Generator::new(&grammar)?,
+    };
 
     Ok(quote::quote! {
         mod parser {
