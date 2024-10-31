@@ -9,7 +9,7 @@ use crate::parse::{GrammarAst, SymbolKind, TerminalKind};
 
 #[derive(Debug)]
 pub struct NonTerminal {
-    sym_id: SymbolId,
+    pub sym_id: SymbolId,
     pub name: Ident,
 }
 

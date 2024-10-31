@@ -1,7 +1,7 @@
 use parse::GrammarAst;
 use proc_macro::TokenStream;
 use quote::ToTokens;
-use syn::parse_macro_input;
+use syn::{parse_macro_input, spanned::Spanned};
 
 mod config;
 mod generate;
@@ -10,6 +10,15 @@ mod parse;
 
 #[proc_macro]
 pub fn grammar(input: TokenStream) -> TokenStream {
+    // todo: check if grammar has changed before re-generating the code.
+    // - either compute the hash of the grammar
+    // - check file timestamp?
+    // let input = proc_macro2::TokenStream::from(input);
+    // let mut hasher = DefaultHasher::default();
+    // dbg!(input.span().source_text()).hash(&mut hasher);
+    // dbg!(hasher.finish());
+
+    let input = input.into();
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         println!("{}", info);

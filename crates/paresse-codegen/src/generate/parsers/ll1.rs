@@ -4,10 +4,8 @@ use paresse_core::grammar::{Symbol as SymbolId, SymbolSet};
 use quote::{format_ident, quote, ToTokens};
 use syn::Ident;
 
-use crate::{
-    hir::{GrammarHir, NonTerminal, Rule, Symbol, Terminal},
-    parse::TerminalKind,
-};
+use crate::hir::{GrammarHir, NonTerminal, Rule, Symbol, Terminal};
+use crate::parse::TerminalKind;
 
 pub struct LL1Generator<'g> {
     grammar: &'g GrammarHir,

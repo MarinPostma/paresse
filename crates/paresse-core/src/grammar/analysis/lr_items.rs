@@ -58,21 +58,28 @@ impl LrItem {
 
     pub fn action(&self, g: &Grammar, from: u32) -> Action {
         let cc = g.canonical_collection();
-        // this is a shift
         if let Some(s) = self.placeholder_right(g) {
-            if let Some(to) = cc.transition(from, s) {
-                return Action::Shift { state: to, symbol: s }
+            if g.is_terminal(s) {
+                if let Some(to) = cc.transition(from, s) {
+                    return Action::Shift {
+                        state: to,
+                        symbol: s,
+                    };
+                }
             }
             Action::Error
-        } else if self.lookahead == Symbol::eof() && self.rule(g).lhs() == g.goal()  {
+        } else if self.lookahead == Symbol::eof() && self.rule(g).lhs() == g.goal() {
             Action::Accept
         } else {
-            Action::Reduce { rule: self.rule, symbol: self.lookahead }
+            Action::Reduce {
+                rule: self.rule,
+                symbol: self.lookahead,
+            }
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Action {
     Shift { state: u32, symbol: Symbol },
     Reduce { rule: usize, symbol: Symbol },
@@ -248,6 +255,13 @@ impl CanonicalCollection {
 
     pub fn transition(&self, from: u32, s: Symbol) -> Option<u32> {
         self.transitions.get(&from).and_then(|t| t.get(&s).copied())
+    }
+
+    /// Returns an iterator over the possible transitions (from -> to) for the passed symbol
+    pub fn transitions_for(&self, s: Symbol) -> impl Iterator<Item = (u32, u32)> + '_ {
+        self.transitions
+            .iter()
+            .filter_map(move |(from, tos)| tos.get(&s).map(|to| (*from, *to)))
     }
 }
 

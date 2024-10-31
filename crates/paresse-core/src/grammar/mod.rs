@@ -115,7 +115,8 @@ impl Grammar {
     }
 
     pub fn canonical_collection(&self) -> &CanonicalCollection {
-        self.canonical_collection.get_or_init(|| CanonicalCollection::compute(self))
+        self.canonical_collection
+            .get_or_init(|| CanonicalCollection::compute(self))
     }
 }
 

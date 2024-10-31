@@ -1,8 +1,4 @@
 #![allow(dead_code)]
-type Expr = u64;
-type Term = u64;
-type Num = u64;
-
 // paresse::grammar! {
 //     #![config(parser_flavor = lr1, goal = Expr)]
 //     Num = <n:"[0-9]+"> => n.parse().unwrap();
@@ -16,14 +12,23 @@ type Num = u64;
 //     };
 // }
 
-type ArgList = u64;
-type MoreArgs = u64;
+type Goal = u64;
+type List = u64;
+type Pair = u64;
 
 paresse::grammar! {
-    #![config(parser_flavor = lr1, goal = Expr)]
-    Expr = Term;
+    #![config(parser_flavor = lr1)]
+    Goal = List;
+    List = {
+        List Pair,
+        Pair,
+    };
+    Pair = {
+        "\\(" Pair "\\)",
+        "\\(" "\\)", };
 }
 
 fn main() {
-    println!("Hello, world!");
+    let expr = std::env::args().skip(1).collect::<String>();
+    parser::Parser::parse(&expr);
 }
