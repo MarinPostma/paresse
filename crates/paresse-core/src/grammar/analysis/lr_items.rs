@@ -69,7 +69,7 @@ impl LrItem {
             }
             Action::Error
         } else if self.lookahead == Symbol::eof() && self.rule(g).lhs() == g.goal() {
-            Action::Accept
+            Action::Accept { rule: self.rule }
         } else {
             Action::Reduce {
                 rule: self.rule,
@@ -83,7 +83,7 @@ impl LrItem {
 pub enum Action {
     Shift { state: u32, symbol: Symbol },
     Reduce { rule: usize, symbol: Symbol },
-    Accept,
+    Accept { rule: usize },
     Error,
 }
 

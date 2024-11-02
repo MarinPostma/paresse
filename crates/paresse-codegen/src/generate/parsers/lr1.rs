@@ -26,8 +26,14 @@ impl<'g> LR1Generator<'g> {
         let fallback = quote! {
             _ => panic!("error!"),
         };
+        let goal_ty = self
+            .grammar
+            .non_terminals()
+            .get_ident(self.grammar.grammar().goal())
+            .unwrap();
         let non_terminals_enum = self.gen_non_terminals_enum();
         quote! {
+            #[derive(Debug)]
             enum StackItem {
                 State(u32),
                 Token(paresse::Token),
@@ -50,7 +56,7 @@ impl<'g> LR1Generator<'g> {
                     }
                 }
 
-                fn run_parse(&mut self) {
+                fn run_parse(&mut self) -> #goal_ty {
                     loop {
                         let state = self.state();
                         match (state, self.lookahead.map(|t| t.kind)) {
@@ -66,7 +72,7 @@ impl<'g> LR1Generator<'g> {
                     current
                 }
 
-                pub fn parse(s: &'input str) {
+                pub fn parse(s: &'input str) -> #goal_ty {
                     let mut tokens = Scan::new(s);
                     let lookahead = tokens.next().transpose().unwrap();
                     let mut parser = Self {
@@ -116,6 +122,7 @@ impl<'g> LR1Generator<'g> {
             .idents()
             .map(|i| quote! { #i(#i) });
         quote! {
+            #[derive(Debug)]
             enum NonTerminals {
                 #(#variants,)*
             }
@@ -131,7 +138,6 @@ struct GenAction<'a> {
 
 impl ToTokens for GenAction<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        dbg!(self.grammar.terminal_mapper());
         match self.action {
             Action::Shift { state, symbol } => GenShift {
                 from: self.from,
@@ -146,20 +152,30 @@ impl ToTokens for GenAction<'_> {
                 symbol,
             }
             .to_tokens(tokens),
-            Action::Accept => GenAccept { from: self.from }.to_tokens(tokens),
+            Action::Accept { rule } => GenAccept {
+                from: self.from,
+                rule: &self.grammar.rules()[rule],
+            }
+            .to_tokens(tokens),
             Action::Error => quote! {}.to_tokens(tokens),
         }
     }
 }
 
-struct GenAccept {
+struct GenAccept<'a> {
     from: u32,
+    rule: &'a Rule,
 }
 
-impl ToTokens for GenAccept {
+impl ToTokens for GenAccept<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let from = self.from;
-        quote! { (#from, None) => return, }.to_tokens(tokens)
+        let reduce = gen_reduce(self.rule);
+        quote! {
+            (#from, None) => {
+                return #reduce;
+            }
+        }.to_tokens(tokens)
     }
 }
 
@@ -195,57 +211,11 @@ impl GenReduce<'_> {
         }
     }
 
-    /// pop items from the stack, and bind them, to produce the reduce symbol
     fn gen_reduce(&self) -> impl ToTokens {
-        let bindings = self.rule.rhs().iter().rev().map(|s| {
-            // the stack is layed out in that way: state, sym, state, sym...
-            let binding = match &s.binding {
-                Some(i) => quote! { let #i = },
-                None => quote! {},
-            };
-            let action = match &s.sym {
-                Symbol::Terminal(_) => {
-                    quote! {
-                        match self.stack.pop() {
-                            Some(StackItem::Token(t)) => {
-                                self.tokens.lexeme(&t.span)
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                }
-                Symbol::NonTerminal(nt) => {
-                    let id = &nt.name;
-                    quote! {
-                        match self.stack.pop() {
-                            Some(StackItem::Node(NonTerminals::#id(i))) => i,
-                            _ => unreachable!(),
-                        }
-                    }
-                }
-            };
-
-            quote! {
-                self.stack.pop();
-                #binding #action;
-            }
-        });
-        let push = self.gen_push();
-        quote! {
-            #(#bindings)*
-            #push
-        }
-    }
-
-    fn gen_push(&self) -> impl ToTokens {
         let reduce_type = &self.rule.lhs().name;
-        let handler = match &self.rule.handler {
-            None => quote! { Default::default() },
-            Some(h) => quote! { #h },
-        };
-
+        let reduced = gen_reduce(self.rule);
         quote! {
-            let out = { #handler };
+            let out = #reduced;
             let state = self.state();
             self.stack.push(StackItem::Node(NonTerminals::#reduce_type(out)));
         }
@@ -290,5 +260,53 @@ impl ToTokens for GenShift {
             }
         }
         .to_tokens(tokens)
+    }
+}
+
+fn gen_reduce(rule: &Rule) -> impl ToTokens {
+    let bindings = rule.rhs().iter().rev().map(|s| {
+        // the stack is layed out in that way: state, sym, state, sym...
+        let binding = match &s.binding {
+            Some(i) => quote! { let #i = },
+            None => quote! {},
+        };
+        let action = match &s.sym {
+            Symbol::Terminal(_) => {
+                quote! {
+                    match self.stack.pop() {
+                        Some(StackItem::Token(t)) => {
+                            self.tokens.lexeme(&t.span)
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            }
+            Symbol::NonTerminal(nt) => {
+                let id = &nt.name;
+                quote! {
+                    match self.stack.pop() {
+                        Some(StackItem::Node(NonTerminals::#id(i))) => i,
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        };
+
+        quote! {
+            self.stack.pop();
+            #binding #action;
+        }
+    });
+
+    let handler = match &rule.handler {
+        None => quote! { Default::default() },
+        Some(h) => quote! { #h },
+    };
+
+    quote! {
+        {
+            #(#bindings)*
+            #handler
+        }
     }
 }
