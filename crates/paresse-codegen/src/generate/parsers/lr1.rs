@@ -1,9 +1,10 @@
 use std::collections::HashSet;
 
-use paresse_core::grammar::Action;
+use paresse_core::grammar::Symbol as SymbolId;
+use paresse_core::grammar::{Action, CanonicalCollection};
 use quote::{quote, ToTokens};
 
-use crate::hir::GrammarHir;
+use crate::hir::{self, GrammarHir, Rule, Symbol};
 
 pub struct LR1Generator<'g> {
     grammar: &'g GrammarHir,
@@ -25,12 +26,15 @@ impl<'g> LR1Generator<'g> {
         let fallback = quote! {
             _ => panic!("error!"),
         };
+        let non_terminals_enum = self.gen_non_terminals_enum();
         quote! {
             enum StackItem {
                 State(u32),
                 Token(paresse::Token),
-                Node(()),
+                Node(NonTerminals),
             }
+
+            #non_terminals_enum
 
             pub struct Parser<'input> {
                 stack: Vec<StackItem>,
@@ -81,7 +85,7 @@ impl<'g> LR1Generator<'g> {
             .map(|i| self.gen_rule(i as u32));
 
         quote! {
-            #(#rules,)*
+            #(#rules)*
         }
     }
 
@@ -94,55 +98,197 @@ impl<'g> LR1Generator<'g> {
             .map(|i| i.action(self.grammar.grammar(), cci))
             .collect::<HashSet<_>>();
 
-        let t_rules = actions.iter().filter_map(|a| match a {
-            Action::Shift { state, symbol } => {
-                let s = symbol.as_u32() as u16;
-                let state = *state;
-                Some(quote! {
-                    (#cci, Some(#s)) => {
-                        let current = self.advance().unwrap();
-                        self.stack.push(StackItem::Token(current));
-                        self.stack.push(StackItem::State(#state));
-                    }
-                })
-            }
-            Action::Reduce { rule, symbol } => {
-                let rule = &self.grammar.rules()[*rule];
-                let n_symbols = rule.rhs.len();
-                let t = if symbol.is_eof() {
-                    quote! { None }
-                } else {
-                    let s = symbol.as_u32() as u16;
-                    quote! { Some(#s)}
-                };
-
-                let transitions = canonical_collection
-                    .transitions_for(rule.lhs().sym_id)
-                    .map(|(from, to)| quote! { #from => #to });
-
-                Some(quote! {
-                    (#cci, t@#t) => {
-                        self.stack.drain(self.stack.len() - 2 * #n_symbols..);
-                        let state = self.state();
-                        self.stack.push(StackItem::Node(()));
-                        let next = match state {
-                            #(#transitions,)*
-                            invalid => unreachable!("invalid transition {invalid}, {t:?}"),
-                        };
-                        self.stack.push(StackItem::State(next));
-                    }
-                })
-            }
-            Action::Accept => Some(quote! {
-                (#cci, None) => {
-                    return
-                }
-            }),
-            Action::Error => None,
+        let t_rules = actions.into_iter().map(|action| GenAction {
+            from: cci,
+            action,
+            grammar: self.grammar,
         });
 
         quote! {
             #(#t_rules)*
         }
+    }
+
+    fn gen_non_terminals_enum(&self) -> impl ToTokens {
+        let variants = self
+            .grammar
+            .non_terminals()
+            .idents()
+            .map(|i| quote! { #i(#i) });
+        quote! {
+            enum NonTerminals {
+                #(#variants,)*
+            }
+        }
+    }
+}
+
+struct GenAction<'a> {
+    from: u32,
+    action: Action,
+    grammar: &'a hir::GrammarHir,
+}
+
+impl ToTokens for GenAction<'_> {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        dbg!(self.grammar.terminal_mapper());
+        match self.action {
+            Action::Shift { state, symbol } => GenShift {
+                from: self.from,
+                to: state,
+                sym: symbol,
+            }
+            .to_tokens(tokens),
+            Action::Reduce { rule, symbol } => GenReduce {
+                cc: self.grammar.grammar().canonical_collection(),
+                rule: &self.grammar.rules()[rule],
+                from: self.from,
+                symbol,
+            }
+            .to_tokens(tokens),
+            Action::Accept => GenAccept { from: self.from }.to_tokens(tokens),
+            Action::Error => quote! {}.to_tokens(tokens),
+        }
+    }
+}
+
+struct GenAccept {
+    from: u32,
+}
+
+impl ToTokens for GenAccept {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let from = self.from;
+        quote! { (#from, None) => return, }.to_tokens(tokens)
+    }
+}
+
+struct GenReduce<'a> {
+    cc: &'a CanonicalCollection,
+    rule: &'a Rule,
+    from: u32,
+    symbol: SymbolId,
+}
+
+impl GenReduce<'_> {
+    fn gen_match_token(&self) -> impl ToTokens {
+        if self.symbol.is_eof() {
+            quote! { None }
+        } else {
+            let s = self.symbol.as_u32() as u16;
+            quote! { Some(#s)}
+        }
+    }
+
+    /// generate code handling the transition to the next state in a reduce operation.
+    fn gen_next_state_transition(&self) -> impl ToTokens {
+        let transitions = self
+            .cc
+            .transitions_for(self.rule.lhs().sym_id)
+            .map(|(from, to)| quote! { #from => #to });
+        quote! {
+            let next = match state {
+                #(#transitions,)*
+                invalid => unreachable!("invalid transition {invalid}, {t:?}"),
+            };
+            self.stack.push(StackItem::State(next));
+        }
+    }
+
+    /// pop items from the stack, and bind them, to produce the reduce symbol
+    fn gen_reduce(&self) -> impl ToTokens {
+        let bindings = self.rule.rhs().iter().rev().map(|s| {
+            // the stack is layed out in that way: state, sym, state, sym...
+            let binding = match &s.binding {
+                Some(i) => quote! { let #i = },
+                None => quote! {},
+            };
+            let action = match &s.sym {
+                Symbol::Terminal(_) => {
+                    quote! {
+                        match self.stack.pop() {
+                            Some(StackItem::Token(t)) => {
+                                self.tokens.lexeme(&t.span)
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                }
+                Symbol::NonTerminal(nt) => {
+                    let id = &nt.name;
+                    quote! {
+                        match self.stack.pop() {
+                            Some(StackItem::Node(NonTerminals::#id(i))) => i,
+                            _ => unreachable!(),
+                        }
+                    }
+                }
+            };
+
+            quote! {
+                self.stack.pop();
+                #binding #action;
+            }
+        });
+        let push = self.gen_push();
+        quote! {
+            #(#bindings)*
+            #push
+        }
+    }
+
+    fn gen_push(&self) -> impl ToTokens {
+        let reduce_type = &self.rule.lhs().name;
+        let handler = match &self.rule.handler {
+            None => quote! { Default::default() },
+            Some(h) => quote! { #h },
+        };
+
+        quote! {
+            let out = { #handler };
+            let state = self.state();
+            self.stack.push(StackItem::Node(NonTerminals::#reduce_type(out)));
+        }
+    }
+}
+
+impl ToTokens for GenReduce<'_> {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let match_token = self.gen_match_token();
+        let state_trans = self.gen_next_state_transition();
+        let reduce = self.gen_reduce();
+        let cci = self.from;
+
+        quote! {
+            (#cci, t@#match_token) => {
+                // reduce
+                #reduce
+                #state_trans
+            }
+        }
+        .to_tokens(tokens)
+    }
+}
+
+struct GenShift {
+    from: u32,
+    to: u32,
+    sym: SymbolId,
+}
+
+impl ToTokens for GenShift {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let s = self.sym.as_u32() as u16;
+        let to = self.to;
+        let from = self.from;
+        quote! {
+            (#from, Some(#s)) => {
+                // shift
+                let current = self.advance().unwrap();
+                self.stack.push(StackItem::Token(current));
+                self.stack.push(StackItem::State(#to));
+            }
+        }
+        .to_tokens(tokens)
     }
 }

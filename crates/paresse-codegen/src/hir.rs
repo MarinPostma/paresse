@@ -67,13 +67,17 @@ impl Rule {
     pub fn lhs(&self) -> &NonTerminal {
         &self.lhs
     }
+
+    pub(crate) fn rhs(&self) -> &[MaybeBoundSymbol] {
+        &self.rhs
+    }
 }
 
 pub struct GrammarBuilder<'a> {
     ast: &'a GrammarAst,
     builder: paresse_core::grammar::Builder,
     /// maps rule name to rule id
-    non_terminal_mapper: HashMap<Ident, SymbolId>,
+    non_terminals: NonTerminals,
     /// maps terminal pattern to id
     terminal_mapper: HashMap<String, SymbolId>,
     /// rules being built
@@ -85,7 +89,7 @@ impl<'a> GrammarBuilder<'a> {
         Self {
             ast: raw,
             builder: paresse_core::grammar::Builder::new(),
-            non_terminal_mapper: HashMap::new(),
+            non_terminals: Default::default(),
             terminal_mapper: HashMap::new(),
             rules: Vec::new(),
         }
@@ -150,8 +154,8 @@ impl<'a> GrammarBuilder<'a> {
 
         let goal = match self.ast.config().goal {
             Some(ref g) => {
-                match self.non_terminal_mapper.get(g) {
-                    Some(s) => Some(*s),
+                match self.non_terminals.get_sym(g) {
+                    Some(s) => Some(s),
                     None => {
                         // TODO: check non-terminals too and report error when we support named
                         // terminals
@@ -167,25 +171,25 @@ impl<'a> GrammarBuilder<'a> {
 
         Ok(GrammarHir {
             rules: self.rules,
-            non_terminal_mapper: self.non_terminal_mapper,
+            non_terminals: self.non_terminals,
             terminal_mapper: self.terminal_mapper,
             grammar: self.builder.build(goal),
         })
     }
 
     fn get_non_terminal_symbol(&mut self, rule_name: &Ident) -> SymbolId {
-        match self.non_terminal_mapper.get(rule_name) {
-            Some(&id) => id,
+        match self.non_terminals.get_sym(rule_name) {
+            Some(id) => id,
             None => {
                 let id = self.builder.next_sym();
-                self.non_terminal_mapper.insert(rule_name.clone(), id);
+                self.non_terminals.insert(rule_name.clone(), id);
                 id
             }
         }
     }
 
     fn contains_non_terminal(&self, rule_name: &Ident) -> bool {
-        self.non_terminal_mapper.contains_key(rule_name)
+        self.non_terminals.contains_ident(rule_name)
     }
 
     fn get_terminal_sym(&mut self, t: &TerminalKind) -> SymbolId {
@@ -203,11 +207,38 @@ impl<'a> GrammarBuilder<'a> {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct NonTerminals {
+    inner: HashMap<Ident, SymbolId>,
+}
+
+impl NonTerminals {
+    pub fn get_sym(&self, id: &Ident) -> Option<SymbolId> {
+        self.inner.get(id).copied()
+    }
+
+    pub fn get_ident(&self, symbol: SymbolId) -> Option<&Ident> {
+        self.inner.iter().find_map(|(i, s)| (*s == symbol).then_some(i))
+    }
+
+    pub fn contains_ident(&self, id: &Ident) -> bool {
+        self.inner.contains_key(id)
+    }
+
+    fn insert(&mut self, id: Ident, symbol: SymbolId) {
+        self.inner.insert(id, symbol);
+    }
+
+    pub fn idents(&self) -> impl Iterator<Item = &Ident> {
+        self.inner.keys()
+    }
+}
+
 pub struct GrammarHir {
     rules: Vec<Rule>,
     grammar: paresse_core::grammar::Grammar,
     /// maps rule name to rule id
-    non_terminal_mapper: HashMap<Ident, SymbolId>,
+    non_terminals: NonTerminals,
     /// maps terminal pattern to id
     terminal_mapper: HashMap<String, SymbolId>,
 }
@@ -217,8 +248,8 @@ impl GrammarHir {
         &self.terminal_mapper
     }
 
-    pub fn non_terminal_mapper(&self) -> &HashMap<Ident, SymbolId> {
-        &self.non_terminal_mapper
+    pub fn non_terminals(&self) -> &NonTerminals {
+        &self.non_terminals
     }
 
     pub fn grammar(&self) -> &paresse_core::grammar::Grammar {

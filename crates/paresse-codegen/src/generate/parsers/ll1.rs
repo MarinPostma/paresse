@@ -198,9 +198,8 @@ impl<'g> LL1Generator<'g> {
     pub fn new(grammar: &'g GrammarHir) -> syn::Result<Self> {
         if let Err((sym, _ambi)) = grammar.grammar().is_backtrack_free() {
             let rule = grammar
-                .non_terminal_mapper()
-                .iter()
-                .find_map(|(id, s)| (*s == sym).then_some(id))
+                .non_terminals()
+                .get_ident(sym)
                 .unwrap();
 
             return Err(syn::Error::new_spanned(rule, format_args!("grammar is not backtack free, `{rule}` can not be disambiguished with a lookahead of 1. Transform the grammar to be backtrack free, or use a more general parser flavor such as lr1")));
@@ -264,11 +263,9 @@ impl<'g> LL1Generator<'g> {
     fn generate_parse_root(&self) -> impl ToTokens {
         let root_ty = self
             .grammar
-            .non_terminal_mapper()
-            .iter()
-            .find(|(_, sym)| **sym == self.grammar.grammar().goal())
-            .unwrap()
-            .0;
+            .non_terminals()
+            .get_ident(self.grammar.grammar().goal())
+            .unwrap();
 
         let root_fn_name = parse_fn_name(root_ty);
 

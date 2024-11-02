@@ -12,17 +12,17 @@
 //     };
 // }
 
+use paresse::grammar;
+
 type Goal = u64;
 type List = u64;
 type Pair = u64;
 
-paresse::grammar! {
+grammar! {
     #![config(parser_flavor = lr1)]
     Goal = List;
     List = {
-        List Pair,
-        Pair,
-    };
+        List Pair, Pair, };
     Pair = {
         "\\(" Pair "\\)",
         "\\(" "\\)", };

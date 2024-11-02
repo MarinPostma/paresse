@@ -1,7 +1,7 @@
 use parse::GrammarAst;
 use proc_macro::TokenStream;
 use quote::ToTokens;
-use syn::{parse_macro_input, spanned::Spanned};
+use syn::parse_macro_input;
 
 mod config;
 mod generate;
@@ -18,7 +18,6 @@ pub fn grammar(input: TokenStream) -> TokenStream {
     // dbg!(input.span().source_text()).hash(&mut hasher);
     // dbg!(hasher.finish());
 
-    let input = input.into();
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         println!("{}", info);
