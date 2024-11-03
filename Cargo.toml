@@ -2,7 +2,7 @@
 name = "paresse"
 version = "0.1.0"
 edition = "2021"
-licence = "MIT"
+license = "MIT"
 description = "Parser generators for lazy people"
 repository = "https://github.com/MarinPostma/paresse"
 readme = "README.md"

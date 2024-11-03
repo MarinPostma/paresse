@@ -237,8 +237,8 @@ fn state_ident(id: usize) -> Ident {
 fn build_scanner(grammar: &GrammarHir) -> Scanner {
     let mut builder = ScannerBuilder::new();
 
-    for (pat, &sym) in grammar.terminal_mapper() {
-        builder.token(pat, sym.as_u32() as u16);
+    for def in grammar.terminals().iter() {
+        builder.token(def.pat(), def.id().as_u32() as u16);
     }
 
     // TODO: take whitespaces as a param to the parser

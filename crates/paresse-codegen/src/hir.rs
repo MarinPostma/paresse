@@ -16,7 +16,6 @@ pub struct NonTerminal {
 #[derive(Debug)]
 pub struct Terminal {
     pub sym_id: SymbolId,
-    pub kind: TerminalKind,
 }
 
 #[derive(Debug)]
@@ -73,13 +72,87 @@ impl Rule {
     }
 }
 
+#[derive(Debug)]
+pub struct TerminalDef {
+    name: Option<Ident>,
+    pat: String,
+    id: SymbolId,
+}
+
+impl TerminalDef {
+    pub fn name(&self) -> Option<&Ident> {
+        self.name.as_ref()
+    }
+
+    pub fn pat(&self) -> &str {
+        &self.pat
+    }
+
+    pub fn id(&self) -> SymbolId {
+        self.id
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct Terminals {
+    defs: Vec<TerminalDef>,
+    names: HashMap<Ident, usize>,
+    pats: HashMap<String, usize>,
+    ids: HashMap<SymbolId, usize>,
+}
+
+impl Terminals {
+    fn insert(&mut self, name: Option<Ident>, pat: String, id: SymbolId) {
+        assert!(!self.pats.contains_key(&pat));
+        assert!(!self.ids.contains_key(&id));
+
+        let idx = self.defs.len();
+        if let Some(ref name) = name {
+            assert!(!self.names.contains_key(name));
+            self.names.insert(name.clone(), idx);
+        }
+
+        self.pats.insert(pat.clone(), idx);
+        self.ids.insert(id, idx);
+        self.defs.push(TerminalDef {
+            name,
+            pat,
+            id,
+        });
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &TerminalDef> {
+        self.defs.iter()
+    }
+
+    pub fn get_by_name(&self, name: &Ident) -> Option<&TerminalDef> {
+        self.names.get(name).and_then(|i| self.defs.get(*i))
+    }
+
+    fn get_by_pattern(&self, pat: &str) -> Option<&TerminalDef> {
+        self.pats.get(pat).and_then(|i| self.defs.get(*i))
+    }
+
+    pub fn get_by_id(&self, id: SymbolId) -> Option<&TerminalDef> {
+        self.ids.get(&id).and_then(|i| self.defs.get(*i))
+    }
+
+    fn contains_pattern(&self, pat: &str) -> bool {
+        self.pats.contains_key(pat)
+    }
+
+    fn contains_name(&self, n: &Ident) -> bool {
+        self.names.contains_key(n)
+    }
+}
+
 pub struct GrammarBuilder<'a> {
     ast: &'a GrammarAst,
     builder: paresse_core::grammar::Builder,
     /// maps rule name to rule id
     non_terminals: NonTerminals,
     /// maps terminal pattern to id
-    terminal_mapper: HashMap<String, SymbolId>,
+    terminals: Terminals,
     /// rules being built
     rules: Vec<Rule>,
 }
@@ -90,19 +163,31 @@ impl<'a> GrammarBuilder<'a> {
             ast: raw,
             builder: paresse_core::grammar::Builder::new(),
             non_terminals: Default::default(),
-            terminal_mapper: HashMap::new(),
+            terminals: Default::default(),
             rules: Vec::new(),
         }
     }
 
     pub fn build(mut self) -> syn::Result<GrammarHir> {
-        // forward-define non-terminals, so that the Ident span points to the rule definition
-        self.ast.rules().iter().for_each(|r| {
-            self.get_non_terminal_symbol(r.lhs());
-        });
-
+        // forward-define non-terminals, and named terminals
         for rule in self.ast.rules() {
-            let sym_id = self.get_non_terminal_symbol(rule.lhs());
+            if rule.is_named_terminal_definition() {
+                let pat = rule.rhs().syms().first().unwrap().kind().as_terminal().unwrap().as_pattern().expect("cannot bind empty string");
+                assert!(!(self.terminals.contains_name(rule.lhs()) | self.terminals.contains_pattern(&pat)), "previous definition of {}", rule.lhs());
+                let sym_id = self.builder.next_sym();
+                self.terminals.insert(Some(rule.lhs().clone()), pat.clone(), sym_id);
+            } else {
+                self.get_or_create_non_terminal_symbol(rule.lhs());
+            }
+        }
+
+        let terminal_rules = self
+            .ast
+            .rules()
+            .iter()
+            .filter(|r| !r.is_named_terminal_definition());
+        for rule in terminal_rules {
+            let sym_id = self.get_or_create_non_terminal_symbol(rule.lhs());
             let lhs = NonTerminal {
                 sym_id,
                 name: rule.lhs().clone(),
@@ -112,23 +197,23 @@ impl<'a> GrammarBuilder<'a> {
                 let s = match sym.kind() {
                     SymbolKind::Terminal(kind) => {
                         let sym_id = self.get_terminal_sym(kind);
-                        Symbol::Terminal(Terminal {
-                            sym_id,
-                            kind: kind.clone(),
-                        })
+                        Symbol::Terminal(Terminal { sym_id })
                     }
                     SymbolKind::Nonterminal(nt) => {
-                        if !self.contains_non_terminal(nt) {
+                        if self.contains_non_terminal(nt) {
+                            let sym_id = self.get_or_create_non_terminal_symbol(nt);
+                            Symbol::NonTerminal(NonTerminal {
+                                sym_id,
+                                name: nt.clone(),
+                            })
+                        } else if let Some(t) = self.terminals.get_by_name(nt) {
+                            Symbol::Terminal(Terminal { sym_id: t.id() })
+                        } else {
                             return Err(syn::Error::new_spanned(
                                 nt,
                                 format_args!("no definition for rule `{nt}`"),
                             ));
                         }
-                        let sym_id = self.get_non_terminal_symbol(nt);
-                        Symbol::NonTerminal(NonTerminal {
-                            sym_id,
-                            name: nt.clone(),
-                        })
                     }
                 };
 
@@ -172,12 +257,12 @@ impl<'a> GrammarBuilder<'a> {
         Ok(GrammarHir {
             rules: self.rules,
             non_terminals: self.non_terminals,
-            terminal_mapper: self.terminal_mapper,
+            terminals: self.terminals,
             grammar: self.builder.build(goal),
         })
     }
 
-    fn get_non_terminal_symbol(&mut self, rule_name: &Ident) -> SymbolId {
+    fn get_or_create_non_terminal_symbol(&mut self, rule_name: &Ident) -> SymbolId {
         match self.non_terminals.get_sym(rule_name) {
             Some(id) => id,
             None => {
@@ -195,11 +280,11 @@ impl<'a> GrammarBuilder<'a> {
     fn get_terminal_sym(&mut self, t: &TerminalKind) -> SymbolId {
         match t {
             TerminalKind::Epsilon => self.builder.epsilon(),
-            TerminalKind::Pattern(ref pat) => match self.terminal_mapper.get(pat) {
-                Some(&id) => id,
+            TerminalKind::Pattern(ref pat) => match self.terminals.get_by_pattern(pat) {
+                Some(def) => def.id,
                 None => {
                     let id = self.builder.next_sym();
-                    self.terminal_mapper.insert(pat.to_owned(), id);
+                    self.terminals.insert(None, pat.to_owned(), id);
                     id
                 }
             },
@@ -240,12 +325,12 @@ pub struct GrammarHir {
     /// maps rule name to rule id
     non_terminals: NonTerminals,
     /// maps terminal pattern to id
-    terminal_mapper: HashMap<String, SymbolId>,
+    terminals: Terminals,
 }
 
 impl GrammarHir {
-    pub fn terminal_mapper(&self) -> &HashMap<String, SymbolId> {
-        &self.terminal_mapper
+    pub fn terminals(&self) -> &Terminals {
+        &self.terminals
     }
 
     pub fn non_terminals(&self) -> &NonTerminals {

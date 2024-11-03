@@ -1,5 +1,7 @@
 //! This modules parses the content of the grammar macro into a raw GrammarAst, that can then be
 //! analyzed into a GrammarHir
+use std::cell::OnceCell;
+
 use quote::ToTokens;
 use syn::parse::Parse;
 use syn::punctuated::Punctuated;
@@ -16,9 +18,37 @@ pub enum TerminalKind {
     Pattern(String),
 }
 
+impl TerminalKind {
+    pub fn as_pattern(&self) -> Option<&String> {
+        if let Self::Pattern(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
+
 pub enum SymbolKind {
     Terminal(TerminalKind),
     Nonterminal(Ident),
+}
+
+impl SymbolKind {
+    /// Returns `true` if the symbol kind is [`Terminal`].
+    ///
+    /// [`Terminal`]: SymbolKind::Terminal
+    #[must_use]
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Terminal(..))
+    }
+
+    pub fn as_terminal(&self) -> Option<&TerminalKind> {
+        if let Self::Terminal(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 }
 
 impl Parse for SymbolKind {
@@ -118,8 +148,18 @@ impl Parse for Rhs {
 pub struct Rule {
     lhs: Ident,
     rhs: Rhs,
+    is_named_terminal_definition: OnceCell<bool>,
 }
+
 impl Rule {
+    fn new(lhs: Ident, rhs: Rhs) -> Self {
+        Self {
+            lhs,
+            rhs,
+            is_named_terminal_definition: Default::default(),
+        }
+    }
+
     pub(crate) fn lhs(&self) -> &Ident {
         &self.lhs
     }
@@ -130,6 +170,17 @@ impl Rule {
 
     pub(crate) fn handler(&self) -> Option<&Expr> {
         self.rhs.handler.as_ref()
+    }
+
+    /// A rule that is in the form RULE = pat, where rule is all uppercase is interpretted as a
+    /// named token definition
+    pub fn is_named_terminal_definition(&self) -> bool {
+        *self.is_named_terminal_definition.get_or_init(|| {
+            let is_lhs_uppercase = self.lhs().to_string().chars().all(|c| c.is_uppercase());
+            let is_rhs_pattern = self.rhs().syms().len() == 1
+                && self.rhs().syms().first().unwrap().kind().is_terminal();
+            is_lhs_uppercase && is_rhs_pattern
+        })
     }
 }
 
@@ -157,16 +208,10 @@ fn parse_rule(input: syn::parse::ParseStream, rules: &mut Vec<Rule>) -> syn::Res
         braced!(content in input);
         let rhss = content.parse_terminated(|s| s.parse::<Rhs>(), Token![,])?;
         for rhs in rhss {
-            rules.push(Rule {
-                lhs: lhs.clone(),
-                rhs,
-            });
+            rules.push(Rule::new(lhs.clone(), rhs));
         }
     } else {
-        rules.push(Rule {
-            lhs,
-            rhs: input.parse()?,
-        });
+        rules.push(Rule::new(lhs, input.parse()?));
     }
 
     input.parse::<Token![;]>()?;

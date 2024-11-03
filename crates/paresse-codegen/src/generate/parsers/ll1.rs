@@ -5,7 +5,6 @@ use quote::{format_ident, quote, ToTokens};
 use syn::Ident;
 
 use crate::hir::{GrammarHir, NonTerminal, Rule, Symbol, Terminal};
-use crate::parse::TerminalKind;
 
 pub struct LL1Generator<'g> {
     grammar: &'g GrammarHir,
@@ -26,10 +25,10 @@ struct AugmentedRule<'a> {
 impl<'a> AugmentedRule<'a> {
     fn parse_items(&self) -> impl Iterator<Item = impl ToTokens> + '_ {
         let sym_action = |s: &Symbol| match s {
-            Symbol::Terminal(Terminal {
-                sym_id,
-                kind: TerminalKind::Pattern(_),
-            }) => {
+            Symbol::Terminal(Terminal { sym_id }) if sym_id.is_epsilon() => {
+                quote! {}
+            }
+            Symbol::Terminal(Terminal { sym_id }) => {
                 let id = sym_id.as_u32() as u16;
                 quote! {
                     {
@@ -47,12 +46,6 @@ impl<'a> AugmentedRule<'a> {
                         }
                     }
                 }
-            }
-            Symbol::Terminal(Terminal {
-                kind: TerminalKind::Epsilon,
-                ..
-            }) => {
-                quote! {}
             }
             Symbol::NonTerminal(ref nt) => {
                 let f = parse_fn_name(&nt.name);
@@ -171,13 +164,14 @@ impl<'a> ParseFn<'a> {
         firsts.remove_epsilon();
         firsts.remove(SymbolId::eof().as_u32());
 
+        dbg!(self.grammar.terminals());
+        dbg!(self.grammar.non_terminals());
         let firsts = firsts.iter().map(|t| {
             self.grammar
-                .terminal_mapper()
-                .iter()
-                .find(|(_, s)| *s == &t)
+                .terminals()
+                .get_by_id(dbg!(t))
                 .unwrap()
-                .1
+                .id()
                 .as_u32() as u16
         });
         quote! {
