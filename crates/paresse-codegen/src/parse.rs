@@ -173,13 +173,13 @@ impl Rule {
     }
 
     /// A rule that is in the form RULE = pat, where rule is all uppercase is interpretted as a
-    /// named token definition
+    /// named token definition, and there is no handler
     pub fn is_named_terminal_definition(&self) -> bool {
         *self.is_named_terminal_definition.get_or_init(|| {
             let is_lhs_uppercase = self.lhs().to_string().chars().all(|c| c.is_uppercase());
             let is_rhs_pattern = self.rhs().syms().len() == 1
                 && self.rhs().syms().first().unwrap().kind().is_terminal();
-            is_lhs_uppercase && is_rhs_pattern
+            is_lhs_uppercase && is_rhs_pattern && self.handler().is_none()
         })
     }
 }

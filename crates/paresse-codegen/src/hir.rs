@@ -114,11 +114,7 @@ impl Terminals {
 
         self.pats.insert(pat.clone(), idx);
         self.ids.insert(id, idx);
-        self.defs.push(TerminalDef {
-            name,
-            pat,
-            id,
-        });
+        self.defs.push(TerminalDef { name, pat, id });
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &TerminalDef> {
@@ -172,10 +168,25 @@ impl<'a> GrammarBuilder<'a> {
         // forward-define non-terminals, and named terminals
         for rule in self.ast.rules() {
             if rule.is_named_terminal_definition() {
-                let pat = rule.rhs().syms().first().unwrap().kind().as_terminal().unwrap().as_pattern().expect("cannot bind empty string");
-                assert!(!(self.terminals.contains_name(rule.lhs()) | self.terminals.contains_pattern(&pat)), "previous definition of {}", rule.lhs());
+                let pat = rule
+                    .rhs()
+                    .syms()
+                    .first()
+                    .unwrap()
+                    .kind()
+                    .as_terminal()
+                    .unwrap()
+                    .as_pattern()
+                    .expect("cannot bind empty string");
+                assert!(
+                    !(self.terminals.contains_name(rule.lhs())
+                        | self.terminals.contains_pattern(pat)),
+                    "previous definition of {}",
+                    rule.lhs()
+                );
                 let sym_id = self.builder.next_sym();
-                self.terminals.insert(Some(rule.lhs().clone()), pat.clone(), sym_id);
+                self.terminals
+                    .insert(Some(rule.lhs().clone()), pat.clone(), sym_id);
             } else {
                 self.get_or_create_non_terminal_symbol(rule.lhs());
             }
@@ -303,7 +314,9 @@ impl NonTerminals {
     }
 
     pub fn get_ident(&self, symbol: SymbolId) -> Option<&Ident> {
-        self.inner.iter().find_map(|(i, s)| (*s == symbol).then_some(i))
+        self.inner
+            .iter()
+            .find_map(|(i, s)| (*s == symbol).then_some(i))
     }
 
     pub fn contains_ident(&self, id: &Ident) -> bool {
