@@ -4,9 +4,13 @@ use super::nfa::{Builder, State, StateId};
 #[derive(Debug, Clone)]
 pub enum RegexAst {
     Match(Class),
+    /// *
     Kleene(Box<Self>),
+    /// |
     Alt(Box<Self>, Box<Self>),
     Concat(Box<Self>, Box<Self>),
+    /// ?
+    Opt(Box<Self>),
 }
 
 impl RegexAst {
@@ -22,6 +26,7 @@ impl RegexAst {
             RegexAst::Kleene(e) => e.priority(),
             RegexAst::Alt(lhs, rhs) => lhs.priority().min(rhs.priority()),
             RegexAst::Concat(lhs, rhs) => lhs.priority() + rhs.priority(),
+            RegexAst::Opt(e) => e.priority(),
         }
     }
 }
@@ -75,5 +80,10 @@ fn build_nfa_from_ast(
 
             (lhs_start, rhs_end)
         }
+        RegexAst::Opt(e) => {
+            let (start, end) = build_nfa_from_ast(e, builder, match_id);
+            let start = builder.push(State::Split { targets: vec![start, end] });
+            (start, end)
+        },
     }
 }

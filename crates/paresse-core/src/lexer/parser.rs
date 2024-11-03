@@ -46,7 +46,7 @@ pub struct Parser {
 ///
 ///   <term> ::= { <factor> }
 ///
-///   <factor> ::= <base> { '*' }
+///   <factor> ::= <base> { '*' } | <base> '?'
 ///             
 ///   <base> ::= <char>
 ///           | ^
@@ -90,6 +90,8 @@ impl Parser {
                 base.clone().into(),
                 Box::new(RegexAst::Kleene(base.into())),
             ))
+        } else if tokens.next_if_eq(&b'?').is_some() {
+            Some(RegexAst::Opt(base.into()))
         } else {
             Some(base)
         }
