@@ -1,7 +1,5 @@
-use std::collections::HashSet;
-
 use paresse_core::grammar::Symbol as SymbolId;
-use paresse_core::grammar::{Action, CanonicalCollection};
+use paresse_core::grammar::{Action, CanonicalCollections};
 use quote::{quote, ToTokens};
 
 use crate::hir::{self, GrammarHir, Rule, Symbol};
@@ -22,6 +20,7 @@ impl<'g> LR1Generator<'g> {
     }
 
     pub fn generate(&self) -> impl ToTokens {
+        self.grammar.grammar().lr1_action_table();
         let rules = self.gen_rules();
         let fallback = quote! {
             _ => panic!("error!: {:?}", self.stack),
@@ -96,15 +95,9 @@ impl<'g> LR1Generator<'g> {
     }
 
     fn gen_rule(&self, cci: u32) -> impl ToTokens {
-        let canonical_collection = self.grammar.grammar().canonical_collection();
-        let items = canonical_collection.get(cci);
+        let actions = self.grammar.grammar().lr1_action_table().actions(cci);
 
-        let actions = items
-            .iter()
-            .map(|i| i.action(self.grammar.grammar(), cci))
-            .collect::<HashSet<_>>();
-
-        let t_rules = actions.into_iter().map(|action| GenAction {
+        let t_rules = actions.into_iter().map(|(_s, action)| GenAction {
             from: cci,
             action,
             grammar: self.grammar,
@@ -171,8 +164,12 @@ impl ToTokens for GenAccept<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let from = self.from;
         let reduce = gen_reduce(self.rule);
+
+                // let name = format!("{} -> {:?}", self.rule.lhs().name, self.rule.rhs().iter().map(|s| &s.sym).collect::<Vec<_>>());
+
         quote! {
             (#from, None) => {
+                // println!("accept: {}", #name);
                 return #reduce;
             }
         }
@@ -181,7 +178,7 @@ impl ToTokens for GenAccept<'_> {
 }
 
 struct GenReduce<'a> {
-    cc: &'a CanonicalCollection,
+    cc: &'a CanonicalCollections,
     rule: &'a Rule,
     from: u32,
     symbol: SymbolId,
@@ -230,11 +227,15 @@ impl ToTokens for GenReduce<'_> {
         let reduce = self.gen_reduce();
         let cci = self.from;
 
+        // let name = format!("{} -> {:?}", self.rule.lhs().name, self.rule.rhs().iter().map(|s| &s.sym).collect::<Vec<_>>());
+
         quote! {
             (#cci, t@#match_token) => {
+                // println!("reduce: {}", #name);
                 // reduce
                 #reduce
                 #state_trans
+                // println!("stack: {:?}", self.stack);
             }
         }
         .to_tokens(tokens)
@@ -253,9 +254,10 @@ impl ToTokens for GenShift {
         let to = self.to;
         let from = self.from;
         quote! {
-            (#from, Some(#s)) => {
+            (#from, Some(t@#s)) => {
                 // shift
                 let current = self.advance().unwrap();
+                // println!("shift: {}, to: {}", self.tokens.lexeme(&current.span), #to);
                 self.stack.push(StackItem::Token(current));
                 self.stack.push(StackItem::State(#to));
             }
@@ -325,7 +327,6 @@ fn gen_reduce(rule: &Rule) -> impl ToTokens {
         None => quote! { Default::default() },
         Some(h) => quote! { #h },
     };
-
     quote! {
         {
             #(#bindings)*

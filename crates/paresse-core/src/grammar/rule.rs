@@ -1,10 +1,17 @@
 use super::symbol::Symbol;
 use super::Builder;
 
+#[derive(Debug, Clone, Copy)]
+pub enum Assoc {
+    Left,
+    Right
+}
+
 #[derive(Debug, Clone)]
 pub struct Rule {
     lhs: Symbol,
     rhs: Vec<Symbol>,
+    assoc: Assoc,
 }
 
 impl Rule {
@@ -18,6 +25,10 @@ impl Rule {
 
     pub fn push_rhs(&mut self, s: Symbol) {
         self.rhs.push(s)
+    }
+
+    pub fn assoc(&self) -> Assoc {
+        self.assoc
     }
 }
 
@@ -36,6 +47,7 @@ impl<'g> RuleBuilder<'g> {
         let rule = Rule {
             lhs: self.rhs,
             rhs: syms.into_iter().collect(),
+            assoc: Assoc::Left,
         };
         self.grammar.push(rule);
         self

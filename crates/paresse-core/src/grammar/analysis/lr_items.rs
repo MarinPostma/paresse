@@ -52,7 +52,11 @@ impl LrItem {
         }
     }
 
-    fn rule<'a>(&self, g: &'a Grammar) -> &'a Rule {
+    pub fn rule_id(&self) -> usize {
+        self.rule
+    }
+
+    pub fn rule<'a>(&self, g: &'a Grammar) -> &'a Rule {
         &g.rules()[self.rule]
     }
 
@@ -90,6 +94,14 @@ impl LrItem {
             }
         }
     }
+
+    pub fn lookahead(&self) -> Symbol {
+        self.lookahead
+    }
+
+    pub fn placeholder(&self) -> usize {
+        self.placeholder
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -98,6 +110,15 @@ pub enum Action {
     Reduce { rule: usize, symbol: Symbol },
     Accept { rule: usize },
     Error,
+}
+impl Action {
+    pub fn is_shift(&self) -> bool {
+        matches!(self, Self::Shift { .. })
+    }
+    
+    pub(crate) fn is_reduce(&self) -> bool {
+        matches!(self, Self::Reduce { .. })
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -203,22 +224,22 @@ impl FromIterator<LrItem> for LrItems {
     }
 }
 
-pub struct CanonicalCollection {
-    sets: Vec<LrItems>,
-    transitions: HashMap<u32, HashMap<Symbol, u32>>,
+pub struct CanonicalCollections {
+    cols: Vec<LrItems>,
+    pub transitions: HashMap<u32, HashMap<Symbol, u32>>,
 }
 
-impl CanonicalCollection {
+impl CanonicalCollections {
     pub fn compute(grammar: &Grammar) -> Self {
-        let mut sets = vec![Self::compute_cc0(grammar)];
+        let mut cols = vec![Self::compute_cc0(grammar)];
         let mut unmarked = BitSet::from_iter([0]);
         let mut transitions: HashMap<_, HashMap<_, _>> = HashMap::new();
         while let Some(from) = unmarked.first() {
             unmarked.remove(from);
-            let terminals = sets[from as usize].placeholder_righthands(grammar);
+            let terminals = cols[from as usize].placeholder_righthands(grammar);
             for terminal in &terminals {
-                let tmp = sets[from as usize].goto(grammar, terminal);
-                let to = match Self::insert(&mut sets, tmp) {
+                let tmp = cols[from as usize].goto(grammar, terminal);
+                let to = match Self::insert(&mut cols, tmp) {
                     Ok(id) => {
                         unmarked.insert(id);
                         id
@@ -232,19 +253,24 @@ impl CanonicalCollection {
             }
         }
 
-        Self { sets, transitions }
+        Self { cols, transitions }
+    }
+
+    /// Returns an iterator over the indexed collections
+    pub fn collections(&self) -> impl Iterator<Item = (u32, &LrItems)> {
+        self.cols.iter().enumerate().map(|(a, b)| (a as u32, b))
     }
 
     pub fn get(&self, i: u32) -> &LrItems {
-        &self.sets[i as usize]
+        &self.cols[i as usize]
     }
 
-    fn insert(sets: &mut Vec<LrItems>, s: LrItems) -> Result<u32, u32> {
-        match Self::id(sets, &s) {
+    fn insert(cols: &mut Vec<LrItems>, s: LrItems) -> Result<u32, u32> {
+        match Self::id(cols, &s) {
             Some(id) => Err(id),
             None => {
-                let id = sets.len() as u32;
-                sets.push(s);
+                let id = cols.len() as u32;
+                cols.push(s);
                 Ok(id)
             }
         }
@@ -266,7 +292,7 @@ impl CanonicalCollection {
     }
 
     pub fn len(&self) -> usize {
-        self.sets.len()
+        self.cols.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -398,7 +424,7 @@ mod test {
 
         let grammar = builder.build(None);
 
-        let cc = CanonicalCollection::compute(&grammar);
+        let cc = CanonicalCollections::compute(&grammar);
 
         assert_eq!(cc.len(), 12);
     }

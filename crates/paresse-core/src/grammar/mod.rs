@@ -19,7 +19,86 @@ pub struct Grammar {
     terminals: OnceCell<Terminals>,
     non_terminals: OnceCell<NonTerminals>,
     augmented_first_sets: OnceCell<AugmentedFirstSets>,
-    canonical_collection: OnceCell<CanonicalCollection>,
+    canonical_collection: OnceCell<CanonicalCollections>,
+    lr1_action_table: OnceCell<LR1ActionTable>,
+}
+
+pub struct LR1ActionTable {
+    actions: Vec<HashMap<Symbol, ActionTableSlot>>,
+}
+
+#[derive(Debug)]
+struct ActionTableSlot {
+    item: LrItem,
+    action: Action,
+}
+
+impl LR1ActionTable {
+    fn compute(g: &Grammar) -> Self {
+        let cc = g.canonical_collection();
+        let mut actions: Vec<HashMap<Symbol, ActionTableSlot>> = std::iter::repeat_with(HashMap::new).take(cc.len()).collect();
+        for (idx, col) in cc.collections() {
+            for item in col {
+                let action = item.action(g, idx);
+                let c = match action {
+                    Action::Shift { symbol, .. } => symbol,
+                    Action::Reduce { .. } => item.lookahead(),
+                    Action::Accept { .. } => Symbol::eof(),
+                    Action::Error => continue,
+                };
+
+                match actions[idx as usize].entry(c) {
+                    Entry::Occupied(mut e) => {
+                        let prev = e.get();
+                        // shift reduce conflict
+                        if prev.action.is_shift() && action.is_reduce() || prev.action.is_reduce() && action.is_shift() {
+                            if prev.item.rule_id() == item.rule_id() {
+                                match item.rule(g).assoc() {
+                                    rule::Assoc::Left if action.is_reduce() => {
+                                        e.insert(ActionTableSlot {
+                                            item: *item,
+                                            action,
+                                        });
+                                    },
+                                    rule::Assoc::Right if action.is_shift() => {
+                                        e.insert(ActionTableSlot {
+                                            item: *item,
+                                            action,
+                                        });
+                                    },
+                                    _ => (),
+                                }
+                            } else {
+                                // TODO: allow defining prec rather than positionnal. We need to
+                                // support for multiple rules with the same precedddence, and
+                                // fallback to assoc
+                                if prev.item.rule_id() > item.rule_id() && action.is_reduce() {
+                                    e.insert({
+                                        ActionTableSlot {
+                                            item: *item,
+                                            action,
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    },
+                    Entry::Vacant(e) => {
+                        e.insert(ActionTableSlot {
+                            item: *item,
+                            action,
+                        });
+                    },
+                }
+            }
+        }
+
+        Self { actions }
+    }
+
+    pub fn actions(&self, from: u32) -> impl Iterator<Item = (Symbol, Action)> + '_ {
+        self.actions[from as usize].iter().map(|(a, b)| (*a, b.action))
+    }
 }
 
 impl Grammar {
@@ -115,9 +194,14 @@ impl Grammar {
         Ok(())
     }
 
-    pub fn canonical_collection(&self) -> &CanonicalCollection {
+    pub fn canonical_collection(&self) -> &CanonicalCollections {
         self.canonical_collection
-            .get_or_init(|| CanonicalCollection::compute(self))
+            .get_or_init(|| CanonicalCollections::compute(self))
+    }
+
+    pub fn lr1_action_table(&self) -> &LR1ActionTable {
+        self.lr1_action_table
+            .get_or_init(|| LR1ActionTable::compute(self))
     }
 }
 
@@ -214,6 +298,7 @@ impl Builder {
             first_sets: OnceCell::new(),
             augmented_first_sets: OnceCell::new(),
             canonical_collection: OnceCell::new(),
+            lr1_action_table: OnceCell::new(),
         }
     }
 }

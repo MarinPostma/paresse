@@ -18,6 +18,8 @@ pub fn grammar(input: TokenStream) -> TokenStream {
     // dbg!(input.span().source_text()).hash(&mut hasher);
     // dbg!(hasher.finish());
 
+    // update the hook for debug purposes, so that we get the location of a panic in the proc
+    // macro. remove when the project is no more WIP
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         println!("{}", info);
