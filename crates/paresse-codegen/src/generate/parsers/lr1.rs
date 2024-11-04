@@ -24,7 +24,7 @@ impl<'g> LR1Generator<'g> {
     pub fn generate(&self) -> impl ToTokens {
         let rules = self.gen_rules();
         let fallback = quote! {
-            _ => panic!("error!"),
+            _ => panic!("error!: {:?}", self.stack),
         };
         let goal_ty = self
             .grammar
@@ -52,7 +52,7 @@ impl<'g> LR1Generator<'g> {
                 fn state(&self) -> u32 {
                     match self.stack.last() {
                         Some(StackItem::State(state)) => *state,
-                        _ => unreachable!("top of stack is not state"),
+                        _ => unreachable!("top of stack is not state, {:?}", self.stack),
                     }
                 }
 
@@ -175,7 +175,8 @@ impl ToTokens for GenAccept<'_> {
             (#from, None) => {
                 return #reduce;
             }
-        }.to_tokens(tokens)
+        }
+        .to_tokens(tokens)
     }
 }
 
@@ -205,7 +206,7 @@ impl GenReduce<'_> {
         quote! {
             let next = match state {
                 #(#transitions,)*
-                invalid => unreachable!("invalid transition {invalid}, {t:?}"),
+                invalid => unreachable!("invalid transition {invalid}, {t:?}, {:?}", self.stack),
             };
             self.stack.push(StackItem::State(next));
         }
@@ -229,6 +230,7 @@ impl ToTokens for GenReduce<'_> {
         let reduce = self.gen_reduce();
         let cci = self.from;
 
+        let rule = self.rule.lhs().name.to_string();
         quote! {
             (#cci, t@#match_token) => {
                 // reduce
@@ -267,33 +269,47 @@ fn gen_reduce(rule: &Rule) -> impl ToTokens {
     let bindings = rule.rhs().iter().rev().map(|s| {
         // the stack is layed out in that way: state, sym, state, sym...
         let binding = match &s.binding {
+            Some(_)
+                if s.sym
+                    .as_terminal()
+                    .map(|s| s.sym_id.is_epsilon())
+                    .unwrap_or(false) =>
+            {
+                panic!("cannot bind epsilon transition")
+            }
             Some(i) => quote! { let #i = },
             None => quote! {},
         };
         let action = match &s.sym {
+            Symbol::Terminal(t) if t.sym_id.is_epsilon() => quote! {},
             Symbol::Terminal(_) => {
                 quote! {
-                    match self.stack.pop() {
-                        Some(StackItem::Token(t)) => {
-                            self.tokens.lexeme(&t.span)
+                    {
+                        self.stack.pop();
+                        match self.stack.pop() {
+                            Some(StackItem::Token(t)) => {
+                                self.tokens.lexeme(&t.span)
+                            }
+                            _ => unreachable!(),
                         }
-                        _ => unreachable!(),
                     }
                 }
             }
             Symbol::NonTerminal(nt) => {
                 let id = &nt.name;
                 quote! {
-                    match self.stack.pop() {
-                        Some(StackItem::Node(NonTerminals::#id(i))) => i,
-                        _ => unreachable!(),
+                    {
+                        self.stack.pop();
+                        match self.stack.pop() {
+                            Some(StackItem::Node(NonTerminals::#id(i))) => i,
+                            _ => unreachable!(),
+                        }
                     }
                 }
             }
         };
 
         quote! {
-            self.stack.pop();
             #binding #action;
         }
     });

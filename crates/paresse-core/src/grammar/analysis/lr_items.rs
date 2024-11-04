@@ -59,7 +59,20 @@ impl LrItem {
     pub fn action(&self, g: &Grammar, from: u32) -> Action {
         let cc = g.canonical_collection();
         if let Some(s) = self.placeholder_right(g) {
-            if g.is_terminal(s) {
+            if s.is_epsilon() {
+                let follow = g.follow_sets().follow(self.rule(g).lhs());
+                if follow.contains(self.lookahead) {
+                    return Action::Reduce {
+                        rule: self.rule,
+                        symbol: self.lookahead,
+                    };
+                } else if let Some(to) = cc.transition(from, s) {
+                    return Action::Shift {
+                        state: to,
+                        symbol: s,
+                    };
+                }
+            } else if g.is_terminal(s) {
                 if let Some(to) = cc.transition(from, s) {
                     return Action::Shift {
                         state: to,
@@ -160,6 +173,13 @@ impl LrItems {
                         }
                     }
                 }
+                // else if right_symbol.is_epsilon() {
+                //     let item = LrItem::new(item.rule, item.placeholder + 1, item.lookahead);
+                //     dbg!(item);
+                //     if self.insert(item) {
+                //         worklist.push(item);
+                //     }
+                // }
             }
         }
     }

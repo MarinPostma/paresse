@@ -82,8 +82,10 @@ fn build_nfa_from_ast(
         }
         RegexAst::Opt(e) => {
             let (start, end) = build_nfa_from_ast(e, builder, match_id);
-            let start = builder.push(State::Split { targets: vec![start, end] });
+            let start = builder.push(State::Split {
+                targets: vec![start, end],
+            });
             (start, end)
-        },
+        }
     }
 }

@@ -31,6 +31,14 @@ impl Symbol {
             Symbol::NonTerminal(nt) => nt.sym_id,
         }
     }
+
+    pub fn as_terminal(&self) -> Option<&Terminal> {
+        if let Self::Terminal(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug)]

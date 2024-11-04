@@ -164,16 +164,9 @@ impl<'a> ParseFn<'a> {
         firsts.remove_epsilon();
         firsts.remove(SymbolId::eof().as_u32());
 
-        dbg!(self.grammar.terminals());
-        dbg!(self.grammar.non_terminals());
-        let firsts = firsts.iter().map(|t| {
-            self.grammar
-                .terminals()
-                .get_by_id(dbg!(t))
-                .unwrap()
-                .id()
-                .as_u32() as u16
-        });
+        let firsts = firsts
+            .iter()
+            .map(|t| self.grammar.terminals().get_by_id(t).unwrap().id().as_u32() as u16);
         quote! {
             match self.peek() {
                 Some(&found) => {
@@ -191,10 +184,7 @@ impl<'a> ParseFn<'a> {
 impl<'g> LL1Generator<'g> {
     pub fn new(grammar: &'g GrammarHir) -> syn::Result<Self> {
         if let Err((sym, _ambi)) = grammar.grammar().is_backtrack_free() {
-            let rule = grammar
-                .non_terminals()
-                .get_ident(sym)
-                .unwrap();
+            let rule = grammar.non_terminals().get_ident(sym).unwrap();
 
             return Err(syn::Error::new_spanned(rule, format_args!("grammar is not backtack free, `{rule}` can not be disambiguished with a lookahead of 1. Transform the grammar to be backtrack free, or use a more general parser flavor such as lr1")));
         }

@@ -15,6 +15,7 @@ pub struct Grammar {
     rules: Vec<Rule>,
     symbols: SymbolSet,
     first_sets: OnceCell<FirstSets>,
+    follow_sets: OnceCell<FollowSets>,
     terminals: OnceCell<Terminals>,
     non_terminals: OnceCell<NonTerminals>,
     augmented_first_sets: OnceCell<AugmentedFirstSets>,
@@ -66,8 +67,8 @@ impl Grammar {
         &self.symbols
     }
 
-    pub fn follow_sets(&self) -> FollowSets {
-        FollowSets::compute(self)
+    pub fn follow_sets(&self) -> &FollowSets {
+        self.follow_sets.get_or_init(|| FollowSets::compute(self))
     }
 
     /// Compute the augmented first sets for this grammar
@@ -207,6 +208,7 @@ impl Builder {
             goal: start,
             rules: self.rules,
             symbols: self.symbols,
+            follow_sets: OnceCell::new(),
             non_terminals: OnceCell::new(),
             terminals: OnceCell::new(),
             first_sets: OnceCell::new(),
