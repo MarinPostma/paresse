@@ -6,7 +6,7 @@ use std::cell::OnceCell;
 use std::collections::{hash_map::Entry, HashMap};
 
 pub use analysis::*;
-use rule::{Rule, RuleBuilder};
+use rule::{Rule, RulesBuilder};
 use symbol::SymbolSource;
 pub use symbol::{Symbol, SymbolSet};
 
@@ -69,16 +69,31 @@ impl LR1ActionTable {
                                     _ => (),
                                 }
                             } else {
-                                // TODO: allow defining prec rather than positionnal. We need to
-                                // support for multiple rules with the same precedddence, and
-                                // fallback to assoc
-                                if prev.item.rule_id() > item.rule_id() && action.is_reduce() {
-                                    e.insert({
-                                        ActionTableSlot {
-                                            item: *item,
-                                            action,
+                                let prev_rule = prev.item.rule(g);
+                                let cur_rule = item.rule(g);
+
+                                match prev_rule.precedence().zip(cur_rule.precedence()) {
+                                    Some((pp, cp)) if cp > pp =>  {
+                                        if action.is_reduce() {
+                                            e.insert({
+                                                ActionTableSlot {
+                                                    item: *item,
+                                                    action,
+                                                }
+                                            });
                                         }
-                                    });
+                                    }
+                                    _ => {
+                                        // default shift
+                                        if action.is_shift() {
+                                            e.insert({
+                                                ActionTableSlot {
+                                                    item: *item,
+                                                    action,
+                                                }
+                                            });
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -224,8 +239,8 @@ impl Builder {
     }
 
     /// Build a new rule for that grammar
-    pub fn rule(&mut self, rhs: Symbol) -> RuleBuilder {
-        RuleBuilder::new(rhs, self)
+    pub fn rule(&mut self, rhs: Symbol) -> RulesBuilder {
+        RulesBuilder::new(rhs, self)
     }
 
     /// Returns the next new sym
@@ -235,11 +250,13 @@ impl Builder {
         s
     }
 
+    /// Adds the epsilon symbol to the grammar and returns it
     pub fn epsilon(&mut self) -> Symbol {
         self.symbols.add(Symbol::epsilon());
         Symbol::epsilon()
     }
 
+    /// Adds the eof symbol to the grammar and returns it
     pub fn eof(&mut self) -> Symbol {
         self.symbols.add(Symbol::eof());
         Symbol::eof()

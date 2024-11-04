@@ -1,12 +1,11 @@
 //! This modules parses the content of the grammar macro into a raw GrammarAst, that can then be
 //! analyzed into a GrammarHir
-use std::cell::OnceCell;
 
 use quote::ToTokens;
 use syn::parse::Parse;
 use syn::punctuated::Punctuated;
 use syn::token::Brace;
-use syn::{braced, Attribute, Expr, Ident, LitStr, MetaNameValue, Token};
+use syn::{braced, Attribute, Expr, ExprLit, Ident, Lit, LitStr, MetaNameValue, Token};
 
 use crate::config::{Config, ParserFlavor};
 
@@ -149,6 +148,31 @@ impl Rhs {
     }
 }
 
+/// Rhs arm in an alt definition:
+/// <Lhs> = {
+///     [#[rule(...)]]   <,
+///     syms... => ...,  <+-- this
+/// };
+struct AltRhs {
+    attr: Option<RuleAttrs>,
+    rhs: Rhs,
+}
+
+impl Parse for AltRhs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let attr = if input.peek(Token![#]) {
+            Some(parse_rule_config(input)?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            attr,
+            rhs: input.parse()?,
+        })
+    }
+}
+
 impl Parse for Rhs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut syms = Vec::new();
@@ -178,15 +202,15 @@ impl Parse for Rhs {
 pub struct Rule {
     lhs: Ident,
     rhs: Rhs,
-    is_named_terminal_definition: OnceCell<bool>,
+    attr: Option<RuleAttrs>,
 }
 
 impl Rule {
-    fn new(lhs: Ident, rhs: Rhs) -> Self {
+    fn new(lhs: Ident, rhs: Rhs, attr: Option<RuleAttrs>) -> Self {
         Self {
             lhs,
             rhs,
-            is_named_terminal_definition: Default::default(),
+            attr,
         }
     }
 
@@ -205,12 +229,14 @@ impl Rule {
     /// A rule that is in the form RULE = pat, where rule is all uppercase is interpretted as a
     /// named token definition, and there is no handler
     pub fn is_named_terminal_definition(&self) -> bool {
-        *self.is_named_terminal_definition.get_or_init(|| {
-            let is_lhs_uppercase = self.lhs().to_string().chars().all(|c| c.is_uppercase());
-            let is_rhs_pattern = self.rhs().syms().len() == 1
-                && self.rhs().syms().first().unwrap().kind().is_terminal();
-            is_lhs_uppercase && is_rhs_pattern && self.handler().is_none()
-        })
+        let is_lhs_uppercase = self.lhs().to_string().chars().all(|c| c.is_uppercase());
+        let is_rhs_pattern = self.rhs().syms().len() == 1
+        && self.rhs().syms().first().unwrap().kind().is_terminal();
+        is_lhs_uppercase && is_rhs_pattern && self.handler().is_none()
+    }
+
+    pub fn attr(&self) -> Option<&RuleAttrs> {
+        self.attr.as_ref()
     }
 }
 
@@ -229,19 +255,103 @@ impl GrammarAst {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct RuleAttr {
+    pub prec: Option<usize>
+}
+
+#[derive(Debug, Clone)]
+pub enum RuleAttrs {
+    Token,
+    Rule(RuleAttr),
+}
+
+impl RuleAttrs {
+    pub(crate) fn as_rule(&self) -> Option<&RuleAttr> {
+        match self {
+            RuleAttrs::Token => None,
+            RuleAttrs::Rule(ref r) => Some(r),
+        }
+    }
+}
+
+fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
+    let attr = input.call(Attribute::parse_outer)?;
+    match &attr[0].meta {
+        syn::Meta::List(l)
+            if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "token" =>
+        {
+            todo!("token rule");
+        }
+        syn::Meta::List(l)
+            if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "rule" =>
+        {
+            let entries = l.parse_args_with(
+                Punctuated::<MetaNameValue, Token![,]>::parse_separated_nonempty,
+            )?;
+
+            let mut prec: Option<usize> = None;
+            for entry in entries {
+                let name = entry.path.to_token_stream().to_string();
+                match name.as_str() {
+                    "prec" => match entry.value {
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Int(i), ..
+                        }) => {
+                            prec = Some(i.base10_parse().unwrap());
+                        }
+                        _ => {
+                            return Err(syn::Error::new_spanned(
+                                &entry.value,
+                                format_args!("prec must be a literal integer"),
+                            ))
+                        }
+                    }
+                    _ => {
+                        return Err(syn::Error::new_spanned(
+                            &entry.value,
+                            format_args!(
+                                "unrecognized rule attribute: {}",
+                                entry.path.to_token_stream()
+                            ),
+                        ))
+                    }
+                }
+            }
+            Ok(RuleAttrs::Rule(RuleAttr{ prec }))
+        }
+        _ => {
+            Err(syn::Error::new_spanned(
+                &attr[0],
+                "rule config in the form `#[rule(..)]` or `#[token(..)]`",
+            ))
+        }
+    }
+}
+
 fn parse_rule(input: syn::parse::ParseStream, rules: &mut Vec<Rule>) -> syn::Result<()> {
+    let rule_attr = if input.peek(Token![#]) {
+        Some(parse_rule_config(input)?)
+    } else {
+        None
+    };
+
     let lhs = input.parse::<Ident>()?;
     input.parse::<Token![=]>()?;
     let lookahead = input.lookahead1();
     if lookahead.peek(Brace) {
+        if rule_attr.is_some() {
+            panic!("alt rules attributes must be defined on the branches");
+        }
         let content;
         braced!(content in input);
-        let rhss = content.parse_terminated(|s| s.parse::<Rhs>(), Token![,])?;
-        for rhs in rhss {
-            rules.push(Rule::new(lhs.clone(), rhs));
+        let rhss = content.parse_terminated(|s| s.parse::<AltRhs>(), Token![,])?;
+        for AltRhs { attr, rhs } in rhss {
+            // FIXME: merge attrs instead of override??
+            rules.push(Rule::new(lhs.clone(), rhs, attr));
         }
     } else {
-        rules.push(Rule::new(lhs, input.parse()?));
+        rules.push(Rule::new(lhs, input.parse()?, rule_attr));
     }
 
     input.parse::<Token![;]>()?;

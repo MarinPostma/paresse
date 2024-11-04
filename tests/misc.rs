@@ -45,17 +45,23 @@ mod ambiguous_grammar {
 
     paresse::grammar! {
         #![config(parser_flavor = lr1)]
+
         Goal = <e:Expr> => e;
+
         Expr = {
+            #[rule(prec = 2)]
             <lhs:Expr> "\\*" <rhs:Expr> => dbg!(lhs * rhs),
+            #[rule(prec = 2)]
+            <lhs:Expr> "/" <rhs:Expr> => dbg!(lhs / rhs),
+            #[rule(prec = 1)]
             <lhs:Expr> "\\+" <rhs:Expr> => dbg!(lhs + rhs),
-            <n:"[0-9]+"> => n.parse().unwrap(),
+            <n:"[0-9]+"> => dbg!(n.parse().unwrap()),
         };
     }
 
     #[test]
     fn ambiguous() {
-        assert_eq!(parser::Parser::parse("1 + 2 * 3"), 7);
+        assert_eq!(parser::Parser::parse("2 * 3 / 4"), 7);
         // assert_eq!(parser::Parser::parse("2 * 3 + 10"), 16);
     }
 

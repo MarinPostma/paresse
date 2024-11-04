@@ -200,12 +200,12 @@ impl<'a> GrammarBuilder<'a> {
             }
         }
 
-        let terminal_rules = self
+        let rules = self
             .ast
             .rules()
             .iter()
             .filter(|r| !r.is_named_terminal_definition());
-        for rule in terminal_rules {
+        for rule in rules {
             let sym_id = self.get_or_create_non_terminal_symbol(rule.lhs());
             let lhs = NonTerminal {
                 sym_id,
@@ -244,9 +244,19 @@ impl<'a> GrammarBuilder<'a> {
                 rhs.push(s);
             }
 
-            self.builder
+            let builder = self.builder
                 .rule(lhs.sym_id)
                 .is(rhs.iter().map(|s| s.sym.symbol_id()));
+            let builder = if let Some(prec) = rule.attr()
+                .and_then(|a| a.as_rule())
+                .and_then(|a| a.prec) {
+                builder.with_precedence(prec)
+            } else {
+                builder
+            };
+
+            builder.build();
+
 
             let rule = Rule {
                 lhs,
