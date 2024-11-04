@@ -5,7 +5,7 @@ use paresse_core::grammar::Symbol as SymbolId;
 use quote::ToTokens;
 use syn::{Expr, Ident};
 
-use crate::parse::{GrammarAst, SymbolKind, TerminalKind};
+use crate::parse::{Binding, GrammarAst, SymbolKind, TerminalKind};
 
 #[derive(Debug)]
 pub struct NonTerminal {
@@ -43,7 +43,7 @@ impl Symbol {
 
 #[derive(Debug)]
 pub struct MaybeBoundSymbol {
-    pub binding: Option<Ident>,
+    pub binding: Option<Binding>,
     pub sym: Symbol,
 }
 

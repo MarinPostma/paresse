@@ -71,8 +71,28 @@ impl Parse for SymbolKind {
 }
 
 pub struct Symbol {
-    name: Option<Ident>,
+    binding: Option<Binding>,
     kind: SymbolKind,
+}
+
+#[derive(Clone, Debug)]
+pub struct Binding {
+    name: Ident,
+    mutable: bool,
+}
+
+impl Binding {
+    pub fn is_mutable(&self) -> bool {
+        self.mutable
+    }
+
+    pub fn name(&self) -> &Ident {
+        &self.name
+    }
+
+    fn new(name: Ident, mutable: bool) -> Self {
+        Self { name, mutable }
+    }
 }
 
 impl Symbol {
@@ -80,8 +100,8 @@ impl Symbol {
         &self.kind
     }
 
-    pub(crate) fn binding(&self) -> Option<&Ident> {
-        self.name.as_ref()
+    pub(crate) fn binding(&self) -> Option<&Binding> {
+        self.binding.as_ref()
     }
 }
 
@@ -91,17 +111,27 @@ impl Parse for Symbol {
         // this is a named binding
         if lookahead.peek(Token![<]) {
             input.parse::<Token![<]>()?;
+            let mutable = if input.peek(Token![mut]) {
+                input.parse::<Token![mut]>()?;
+                true
+            } else {
+                false
+            };
+
             let name = input.parse::<Ident>()?;
             input.parse::<Token![:]>()?;
             let kind = input.parse::<SymbolKind>()?;
             input.parse::<Token![>]>()?;
             Ok(Self {
-                name: Some(name),
+                binding: Some(Binding::new(name, mutable)),
                 kind,
             })
         } else if lookahead.peek(Ident) || lookahead.peek(LitStr) {
             let kind = input.parse::<SymbolKind>()?;
-            Ok(Self { name: None, kind })
+            Ok(Self {
+                binding: None,
+                kind,
+            })
         } else {
             panic!("invalid symbol")
         }

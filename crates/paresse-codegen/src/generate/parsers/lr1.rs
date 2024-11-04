@@ -230,7 +230,6 @@ impl ToTokens for GenReduce<'_> {
         let reduce = self.gen_reduce();
         let cci = self.from;
 
-        let rule = self.rule.lhs().name.to_string();
         quote! {
             (#cci, t@#match_token) => {
                 // reduce
@@ -277,7 +276,15 @@ fn gen_reduce(rule: &Rule) -> impl ToTokens {
             {
                 panic!("cannot bind epsilon transition")
             }
-            Some(i) => quote! { let #i = },
+            Some(b) => {
+                let mutable = if b.is_mutable() {
+                    quote! { mut }
+                } else {
+                    quote! {}
+                };
+                let name = b.name();
+                quote! { let #mutable #name = }
+            }
             None => quote! {},
         };
         let action = match &s.sym {

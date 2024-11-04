@@ -59,8 +59,14 @@ impl<'a> AugmentedRule<'a> {
             let action = sym_action(&sym.sym);
             match sym.binding {
                 Some(ref binding) => {
+                    let mutable = if binding.is_mutable() {
+                        quote! {mut}
+                    } else {
+                        quote! {}
+                    };
+                    let name = binding.name();
                     quote! {
-                        let #binding = #action;
+                        let #mutable #name = #action;
                     }
                 }
                 None => {
