@@ -69,11 +69,11 @@ impl LR1ActionTable {
         new: ActionTableSlot,
         lookahead: Symbol,
     ) {
-        let la_prec = g.prec(lookahead);
+        let la_prec = g.sym_prec(lookahead);
         let reduce_prec = if new.action.is_reduce() {
-            new.item.rule(g).prec(g)
+            g.rule_prec(new.item.rule_id())
         } else {
-            prev.item.rule(g).prec(g)
+            g.rule_prec(prev.item.rule_id())
         };
 
         match reduce_prec.zip(la_prec) {

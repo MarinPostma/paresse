@@ -11,15 +11,18 @@ use symbol::SymbolSource;
 pub use symbol::{Symbol, SymbolSet};
 
 #[derive(Debug, Clone, Copy)]
-struct Prec {
-    assoc: Assoc,
-    prec: Option<usize>,
+pub struct Prec {
+    pub assoc: Assoc,
+    pub prec: Option<usize>,
 }
 
 pub struct Grammar {
     goal: Symbol,
     rules: Vec<Rule>,
-    precs: HashMap<Symbol, Prec>,
+    /// maps symbols to precedences
+    sym_precs: HashMap<Symbol, Prec>,
+    /// map rules to precedence overrides
+    rule_precs: HashMap<usize, Prec>,
     symbols: SymbolSet,
     first_sets: OnceCell<FirstSets>,
     follow_sets: OnceCell<FollowSets>,
@@ -131,19 +134,28 @@ impl Grammar {
             .get_or_init(|| LR1ActionTable::compute(self))
     }
 
-    pub fn assoc(&self, s: Symbol) -> Option<Assoc> {
-        self.precs.get(&s).map(|p| p.assoc)
+    pub fn sym_assoc(&self, s: Symbol) -> Option<Assoc> {
+        self.sym_precs.get(&s).map(|p| p.assoc)
     }
 
-    pub fn prec(&self, s: Symbol) -> Option<usize> {
-        self.precs.get(&s).and_then(|p| p.prec)
+    pub fn sym_prec(&self, s: Symbol) -> Option<usize> {
+        self.sym_precs.get(&s).and_then(|p| p.prec)
+    }
+
+    /// Returns the precedence for the passed rule, if any
+    pub fn rule_prec(&self, rule: usize) -> Option<usize> {
+        match self.rule_precs.get(&rule) {
+            Some(prec) => prec.prec,
+            None => self.rules[rule].last_terminal(self).and_then(|s| self.sym_prec(s))
+        }
     }
 }
 
 #[derive(Default, Debug)]
 pub struct Builder {
     symbol_source: SymbolSource,
-    precs: HashMap<Symbol, Prec>,
+    sym_precs: HashMap<Symbol, Prec>,
+    rule_precs: HashMap<usize, Prec>,
     rules: Vec<Rule>,
     symbols: SymbolSet,
 }
@@ -173,7 +185,7 @@ impl Builder {
 
     /// Set the precedence and associatity for a symbol
     pub fn set_sym_prec(&mut self, sym: Symbol, prec: Option<usize>, assoc: Assoc) {
-        self.precs.insert(sym, Prec { prec, assoc });
+        self.sym_precs.insert(sym, Prec { prec, assoc });
     }
 
     /// Adds the epsilon symbol to the grammar and returns it
@@ -235,7 +247,7 @@ impl Builder {
         let non_terminals = NonTerminals::compute(&self.rules);
         let terminals = Terminals::compute(&non_terminals, &self.symbols);
 
-        for &sym in self.precs.keys() {
+        for &sym in self.sym_precs.keys() {
             assert!(
                 terminals.contains(sym),
                 "precence can only be defined for terminal symbols, but {sym:?} is a non-terminal"
@@ -246,6 +258,8 @@ impl Builder {
             goal: start,
             rules: self.rules,
             symbols: self.symbols,
+            sym_precs: self.sym_precs,
+            rule_precs: self.rule_precs,
             follow_sets: OnceCell::new(),
             non_terminals,
             terminals,
@@ -253,7 +267,6 @@ impl Builder {
             augmented_first_sets: OnceCell::new(),
             canonical_collection: OnceCell::new(),
             lr1_action_table: OnceCell::new(),
-            precs: self.precs,
         }
     }
 }

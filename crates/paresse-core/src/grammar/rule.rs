@@ -1,5 +1,5 @@
 use super::symbol::Symbol;
-use super::{Builder, Grammar};
+use super::{Builder, Grammar, Prec};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Assoc {
@@ -27,7 +27,7 @@ impl Rule {
     }
 
     /// returns the last non-terminal mentionned in this rule's rhs
-    pub fn last_non_terminal(&self, g: &Grammar) -> Option<Symbol> {
+    pub fn last_terminal(&self, g: &Grammar) -> Option<Symbol> {
         for &s in self.rhs().iter().rev() {
             if g.is_terminal(s) {
                 return Some(s)
@@ -41,14 +41,7 @@ impl Rule {
     ///
     /// The precedence of a rule is the precedence of the latest non-terminal that it mentions
     pub fn assoc(&self, g: &Grammar) -> Option<Assoc> {
-        self.last_non_terminal(g).and_then(|s| g.assoc(s))
-    }
-
-    /// Returns the precedence of this rule, if any
-    ///
-    /// The precedence of a rule is the precedence of the latest non-terminal that it mentions
-    pub fn prec(&self, g: &Grammar) -> Option<usize> {
-        self.last_non_terminal(g).and_then(|s| g.prec(s))
+        self.last_terminal(g).and_then(|s| g.sym_assoc(s))
     }
 }
 
@@ -70,6 +63,17 @@ impl<'g> RuleBuilder<'g> {
             rhs: syms.into_iter().collect(),
         };
         self.grammar.rules.push(rule);
+        self
+    }
+
+    pub fn is_precedence(self, syms: impl IntoIterator<Item = Symbol>, prec: Prec) -> Self {
+        let rule = Rule {
+            lhs: self.lhs,
+            rhs: syms.into_iter().collect(),
+        };
+        let rule_id = self.grammar.rules.len();
+        self.grammar.rules.push(rule);
+        self.grammar.rule_precs.insert(rule_id,prec);
         self
     }
 }
