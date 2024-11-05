@@ -260,7 +260,10 @@ impl GrammarAst {
 }
 
 #[derive(Debug, Clone)]
-pub struct RuleAttr {}
+pub struct RuleAttr {
+    pub assoc: Assoc,
+    pub prec: Option<usize>,
+}
 
 #[derive(Debug, Clone)]
 pub struct TokenAttr {
@@ -304,7 +307,55 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
         syn::Meta::List(l)
             if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "rule" =>
         {
-            todo!("rule attr");
+            let entries = l.parse_args_with(
+                Punctuated::<MetaNameValue, Token![,]>::parse_separated_nonempty,
+            )?;
+
+            let mut prec: Option<usize> = None;
+            let mut assoc = Assoc::Left;
+            for entry in entries {
+                let name = entry.path.to_token_stream().to_string();
+                match name.as_str() {
+                    "prec" => match entry.value {
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Int(i), ..
+                        }) => {
+                            prec = Some(i.base10_parse().unwrap());
+                        }
+                        _ => {
+                            return Err(syn::Error::new_spanned(
+                                &entry.value,
+                                format_args!("prec must be a literal integer"),
+                            ))
+                        }
+                    },
+                    "assoc" => match entry.value {
+                        Expr::Path(p) => {
+                            assoc = match p.to_token_stream().to_string().as_str() {
+                                "left" => Assoc::Left,
+                                "right" => Assoc::Right,
+                                _ => {
+                                    return Err(syn::Error::new_spanned(
+                                        p,
+                                        "assoc must be `left` or `right`",
+                                    ))
+                                }
+                            };
+                        }
+                        _ => todo!(),
+                    },
+                    _ => {
+                        return Err(syn::Error::new_spanned(
+                            &entry.value,
+                            format_args!(
+                                "unrecognized rule attribute: {}",
+                                entry.path.to_token_stream()
+                            ),
+                        ))
+                    }
+                }
+            }
+            Ok(RuleAttrs::Rule(RuleAttr { prec, assoc }))
         }
         syn::Meta::List(l)
             if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "token" =>
@@ -384,7 +435,6 @@ fn parse_rule(input: syn::parse::ParseStream, rules: &mut Vec<Rule>) -> syn::Res
         braced!(content in input);
         let rhss = content.parse_terminated(|s| s.parse::<AltRhs>(), Token![,])?;
         for AltRhs { attr, rhs } in rhss {
-            // FIXME: merge attrs instead of override??
             rules.push(Rule::new(lhs.clone(), rhs, attr));
         }
     } else {

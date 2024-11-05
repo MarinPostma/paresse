@@ -48,6 +48,12 @@ mod ambiguous_grammar {
         Div,
         And,
         Or,
+        Minus,
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum UnaryOp {
+        Minus,
     }
 
     #[derive(Debug, PartialEq, Eq)]
@@ -56,6 +62,10 @@ mod ambiguous_grammar {
             op: BinOp,
             lhs: Box<Self>,
             rhs: Box<Self>,
+        },
+        Unary {
+            op: UnaryOp,
+            e: Box<Self>,
         },
         Num(u64),
     }
@@ -72,11 +82,14 @@ mod ambiguous_grammar {
         Goal = <e:Expr> => e;
 
         Expr = {
-            <mut lhs:Expr> ADD <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Add },
-            <mut lhs:Expr> MULT <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Mult },
-            <mut lhs:Expr> DIV <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Div },
-            <mut lhs:Expr> AND <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::And },
-            <mut lhs:Expr> OR <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Or },
+            <lhs:Expr> ADD <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Add },
+            <lhs:Expr> MINUS <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Minus },
+            <lhs:Expr> MULT <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Mult },
+            <lhs:Expr> DIV <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Div },
+            <lhs:Expr> AND <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::And },
+            <lhs:Expr> OR <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Or },
+            #[rule(prec = 4)]
+            MINUS <e:Expr> => Expr::Unary { op: UnaryOp::Minus, e: e.into() },
             <n:"[0-9]+"> => Expr::Num(n.parse().unwrap()),
         };
 
@@ -91,6 +104,8 @@ mod ambiguous_grammar {
         DIV = "/";
         #[token(assoc = right, prec = 1)]
         ADD = "\\+";
+        #[token(assoc = right, prec = 1)]
+        MINUS = "-";
 
     }
 
@@ -188,6 +203,20 @@ mod ambiguous_grammar {
                     lhs: Box::new(2.into()),
                     rhs: Box::new(3.into())
                 }),
+            }
+        );
+
+        // unary binds more that binary
+        assert_eq!(
+            parser::Parser::parse("-1 - 1"),
+            Expr::Bin {
+                op: BinOp::Minus,
+                lhs: Expr::Unary {
+                    op: UnaryOp::Minus,
+                    e: Box::new(1.into())
+                }
+                .into(),
+                rhs: Box::new(1.into())
             }
         );
     }
