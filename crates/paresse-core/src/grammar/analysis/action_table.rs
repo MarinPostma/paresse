@@ -5,6 +5,12 @@ use crate::grammar::{Assoc, Grammar, Symbol};
 
 use super::{Action, LrItem};
 
+#[derive(Debug, Copy, Clone)]
+pub enum ActionTableError {
+    UnhandledShiftReduce { rule1: usize, rule2: usize },
+    UnhandledReduceReduce { rule1: usize, rule2: usize },
+}
+
 pub struct LR1ActionTable {
     actions: Vec<HashMap<Symbol, ActionTableSlot>>,
 }
@@ -17,7 +23,7 @@ struct ActionTableSlot {
 
 impl LR1ActionTable {
     /// Fixme: handle error in table construction
-    pub fn compute(g: &Grammar) -> Self {
+    pub fn compute(g: &Grammar) -> Result<Self, ActionTableError> {
         let cc = g.canonical_collection();
         let mut actions: Vec<HashMap<Symbol, ActionTableSlot>> =
             std::iter::repeat_with(HashMap::new)
@@ -39,7 +45,7 @@ impl LR1ActionTable {
                 };
 
                 match actions[idx as usize].entry(c) {
-                    Entry::Occupied(mut e) => Self::resolve_conflict(g, e.get_mut(), new, c),
+                    Entry::Occupied(mut e) => Self::resolve_conflict(g, e.get_mut(), new, c)?,
                     Entry::Vacant(e) => {
                         e.insert(new);
                     }
@@ -47,7 +53,7 @@ impl LR1ActionTable {
             }
         }
 
-        Self { actions }
+        Ok(Self { actions })
     }
 
     fn resolve_conflict(
@@ -55,11 +61,16 @@ impl LR1ActionTable {
         prev: &mut ActionTableSlot,
         new: ActionTableSlot,
         lookahead: Symbol,
-    ) {
+    ) -> Result<(), ActionTableError> {
         if Self::is_shift_reduce(prev, &new) {
-            Self::handle_shit_reduce(g, prev, new, lookahead);
+            Self::handle_shit_reduce(g, prev, new, lookahead)
         } else if Self::is_reduce_reduce(prev, &new) {
-            todo!("handle reduce reduce")
+            Err(ActionTableError::UnhandledReduceReduce {
+                rule1: prev.item.rule_id(),
+                rule2: new.item.rule_id(),
+            })
+        } else {
+            Ok(())
         }
     }
 
@@ -68,7 +79,7 @@ impl LR1ActionTable {
         prev: &mut ActionTableSlot,
         new: ActionTableSlot,
         lookahead: Symbol,
-    ) {
+    ) -> Result<(), ActionTableError> {
         let la_prec = g.sym_prec(lookahead);
         let reduce_prec = if new.action.is_reduce() {
             g.rule_prec(new.item.rule_id())
@@ -89,12 +100,15 @@ impl LR1ActionTable {
                 }
                 _ => (),
             },
-            None => todo!(
-                "no prec for rules {} and {}",
-                prev.item.rule_id(),
-                new.item.rule_id()
-            ),
+            None => {
+                return Err(ActionTableError::UnhandledShiftReduce {
+                    rule1: prev.item.rule_id(),
+                    rule2: new.item.rule_id(),
+                })
+            }
         }
+
+        Ok(())
     }
 
     fn is_shift_reduce(lhs: &ActionTableSlot, rhs: &ActionTableSlot) -> bool {

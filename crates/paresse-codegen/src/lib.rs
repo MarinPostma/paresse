@@ -34,6 +34,7 @@ pub fn grammar(input: TokenStream) -> TokenStream {
 }
 
 fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
+    let before = std::time::Instant::now();
     let grammar = crate::hir::GrammarBuilder::new(&ast).build()?;
     let lexer = generate::lexer::LexerGenerator::new(&grammar);
 
@@ -41,6 +42,8 @@ fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
         config::ParserFlavor::Ll1 => &generate::parsers::ll1::LL1Generator::new(&grammar)?,
         config::ParserFlavor::Lr1 => &generate::parsers::lr1::LR1Generator::new(&grammar)?,
     };
+
+    println!("generated grammar in {:?}", before.elapsed());
 
     Ok(quote::quote! {
         mod parser {

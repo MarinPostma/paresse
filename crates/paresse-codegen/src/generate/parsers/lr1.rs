@@ -1,4 +1,4 @@
-use paresse_core::grammar::Symbol as SymbolId;
+use paresse_core::grammar::{ActionTableError, Symbol as SymbolId};
 use paresse_core::grammar::{Action, CanonicalCollections};
 use quote::{quote, ToTokens};
 
@@ -94,7 +94,11 @@ impl<'g> LR1Generator<'g> {
     }
 
     fn gen_rule(&self, cci: u32) -> impl ToTokens {
-        let actions = self.grammar.grammar().lr1_action_table().actions(cci);
+        let actions = match self.grammar.grammar().lr1_action_table() {
+            Ok(t) => t.actions(cci),
+            Err(ActionTableError::UnhandledShiftReduce { rule1, rule2 }) => todo!(),
+            Err(ActionTableError::UnhandledReduceReduce { rule1, rule2 }) => todo!(),
+        };
 
         let t_rules = actions.into_iter().map(|(_s, action)| GenAction {
             from: cci,

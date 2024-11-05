@@ -30,7 +30,7 @@ pub struct Grammar {
     non_terminals: NonTerminals,
     augmented_first_sets: OnceCell<AugmentedFirstSets>,
     canonical_collection: OnceCell<CanonicalCollections>,
-    lr1_action_table: OnceCell<LR1ActionTable>,
+    lr1_action_table: OnceCell<Result<LR1ActionTable, ActionTableError>>,
 }
 
 impl Grammar {
@@ -129,9 +129,11 @@ impl Grammar {
             .get_or_init(|| CanonicalCollections::compute(self))
     }
 
-    pub fn lr1_action_table(&self) -> &LR1ActionTable {
+    pub fn lr1_action_table(&self) -> Result<&LR1ActionTable, ActionTableError> {
         self.lr1_action_table
             .get_or_init(|| LR1ActionTable::compute(self))
+            .as_ref()
+            .map_err(|e| *e)
     }
 
     pub fn sym_assoc(&self, s: Symbol) -> Option<Assoc> {
