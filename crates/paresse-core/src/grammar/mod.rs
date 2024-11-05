@@ -3,21 +3,29 @@ mod rule;
 mod symbol;
 
 use std::cell::OnceCell;
+use std::cmp::Ordering;
 use std::collections::{hash_map::Entry, HashMap};
 
 pub use analysis::*;
-use rule::{Rule, RulesBuilder};
+pub use rule::{Assoc, Rule, RuleBuilder};
 use symbol::SymbolSource;
 pub use symbol::{Symbol, SymbolSet};
+
+#[derive(Debug, Clone, Copy)]
+struct Prec {
+    assoc: Assoc,
+    prec: Option<usize>,
+}
 
 pub struct Grammar {
     goal: Symbol,
     rules: Vec<Rule>,
+    precs: HashMap<Symbol, Prec>,
     symbols: SymbolSet,
     first_sets: OnceCell<FirstSets>,
     follow_sets: OnceCell<FollowSets>,
-    terminals: OnceCell<Terminals>,
-    non_terminals: OnceCell<NonTerminals>,
+    terminals: Terminals,
+    non_terminals: NonTerminals,
     augmented_first_sets: OnceCell<AugmentedFirstSets>,
     canonical_collection: OnceCell<CanonicalCollections>,
     lr1_action_table: OnceCell<LR1ActionTable>,
@@ -34,9 +42,13 @@ struct ActionTableSlot {
 }
 
 impl LR1ActionTable {
+    /// Fixme: handle error in table construction
     fn compute(g: &Grammar) -> Self {
         let cc = g.canonical_collection();
-        let mut actions: Vec<HashMap<Symbol, ActionTableSlot>> = std::iter::repeat_with(HashMap::new).take(cc.len()).collect();
+        let mut actions: Vec<HashMap<Symbol, ActionTableSlot>> =
+            std::iter::repeat_with(HashMap::new)
+                .take(cc.len())
+                .collect();
         for (idx, col) in cc.collections() {
             for item in col {
                 let action = item.action(g, idx);
@@ -47,63 +59,16 @@ impl LR1ActionTable {
                     Action::Error => continue,
                 };
 
-                match actions[idx as usize].entry(c) {
-                    Entry::Occupied(mut e) => {
-                        let prev = e.get();
-                        // shift reduce conflict
-                        if prev.action.is_shift() && action.is_reduce() || prev.action.is_reduce() && action.is_shift() {
-                            if prev.item.rule_id() == item.rule_id() {
-                                match item.rule(g).assoc() {
-                                    rule::Assoc::Left if action.is_reduce() => {
-                                        e.insert(ActionTableSlot {
-                                            item: *item,
-                                            action,
-                                        });
-                                    },
-                                    rule::Assoc::Right if action.is_shift() => {
-                                        e.insert(ActionTableSlot {
-                                            item: *item,
-                                            action,
-                                        });
-                                    },
-                                    _ => (),
-                                }
-                            } else {
-                                let prev_rule = prev.item.rule(g);
-                                let cur_rule = item.rule(g);
+                let new = ActionTableSlot {
+                    item: *item,
+                    action,
+                };
 
-                                match prev_rule.precedence().zip(cur_rule.precedence()) {
-                                    Some((pp, cp)) if cp > pp =>  {
-                                        if action.is_reduce() {
-                                            e.insert({
-                                                ActionTableSlot {
-                                                    item: *item,
-                                                    action,
-                                                }
-                                            });
-                                        }
-                                    }
-                                    _ => {
-                                        // default shift
-                                        if action.is_shift() {
-                                            e.insert({
-                                                ActionTableSlot {
-                                                    item: *item,
-                                                    action,
-                                                }
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
+                match actions[idx as usize].entry(c) {
+                    Entry::Occupied(mut e) => Self::resolve_conflict(g, e.get_mut(), new, c),
                     Entry::Vacant(e) => {
-                        e.insert(ActionTableSlot {
-                            item: *item,
-                            action,
-                        });
-                    },
+                        e.insert(new);
+                    }
                 }
             }
         }
@@ -111,8 +76,82 @@ impl LR1ActionTable {
         Self { actions }
     }
 
+    fn resolve_conflict(
+        g: &Grammar,
+        prev: &mut ActionTableSlot,
+        new: ActionTableSlot,
+        lookahead: Symbol,
+    ) {
+        if Self::is_shift_reduce(prev, &new) {
+            Self::handle_shit_reduce(g, prev, new, lookahead);
+        } else if Self::is_reduce_reduce(prev, &new) {
+            todo!("handle reduce reduce")
+        }
+    }
+
+    fn handle_shit_reduce(
+        g: &Grammar,
+        prev: &mut ActionTableSlot,
+        new: ActionTableSlot,
+        lookahead: Symbol,
+    ) {
+        let la_prec = g.prec(lookahead);
+        let reduce_prec = if new.action.is_reduce() {
+            new.item.rule(g).prec(g)
+        } else {
+            prev.item.rule(g).prec(g)
+        };
+
+        match reduce_prec.zip(la_prec) {
+            Some((rprec, laprec)) => match rprec.cmp(&laprec) {
+                Ordering::Greater if !prev.action.is_reduce() => {
+                    *prev = new;
+                }
+                Ordering::Less if !prev.action.is_shift() => {
+                    *prev = new;
+                }
+                Ordering::Equal => {
+                    Self::resolve_assoc(g, prev, new);
+                }
+                _ => (),
+            },
+            None => todo!(),
+        }
+    }
+
+    fn is_shift_reduce(lhs: &ActionTableSlot, rhs: &ActionTableSlot) -> bool {
+        lhs.action.is_shift() && rhs.action.is_reduce()
+            || lhs.action.is_reduce() && rhs.action.is_shift()
+    }
+
+    fn resolve_assoc(g: &Grammar, prev: &mut ActionTableSlot, new: ActionTableSlot) {
+        // this is an associativity conflict
+        match new.item.rule(g).assoc(g) {
+            Some(Assoc::Left) if new.action.is_reduce() => {
+                // if the rule is left associative, then we favor a reduce
+                // operation over a shift
+                *prev = new;
+            }
+            Some(Assoc::Right) if new.action.is_shift() => {
+                // if the rule is right associative, on the other hand, we
+                // favor a shift
+                *prev = new;
+            }
+            // the branch handle the cases where the right action was
+            // already in the slot
+            Some(_) => (),
+            None => todo!("unhandled shit-reduce conflict"),
+        }
+    }
+
     pub fn actions(&self, from: u32) -> impl Iterator<Item = (Symbol, Action)> + '_ {
-        self.actions[from as usize].iter().map(|(a, b)| (*a, b.action))
+        self.actions[from as usize]
+            .iter()
+            .map(|(a, b)| (*a, b.action))
+    }
+
+    fn is_reduce_reduce(prev: &mut ActionTableSlot, new: &ActionTableSlot) -> bool {
+        prev.action.is_reduce() && new.action.is_reduce()
     }
 }
 
@@ -132,15 +171,13 @@ impl Grammar {
     /// Computes the set of non-terminal symbols of this grammar.
     /// Non-terminal symbols are the symbols that can appear as the left-hand side of a grammar rule.
     pub fn non_terminals(&self) -> &NonTerminals {
-        self.non_terminals
-            .get_or_init(|| NonTerminals::compute(self.rules()))
+        &self.non_terminals
     }
 
     /// Returns the set of terminal symbols.
     /// Terminal symbols are the symbols that don't appear on the left-hand side of a grammar rule.
     pub fn terminals(&self) -> &Terminals {
-        self.terminals
-            .get_or_init(|| Terminals::compute(self.non_terminals(), self.symbols()))
+        &self.terminals
     }
 
     /// Returns the rule of this grammar
@@ -218,11 +255,20 @@ impl Grammar {
         self.lr1_action_table
             .get_or_init(|| LR1ActionTable::compute(self))
     }
+
+    pub fn assoc(&self, s: Symbol) -> Option<Assoc> {
+        self.precs.get(&s).map(|p| p.assoc)
+    }
+
+    pub fn prec(&self, s: Symbol) -> Option<usize> {
+        self.precs.get(&s).and_then(|p| p.prec)
+    }
 }
 
 #[derive(Default, Debug)]
 pub struct Builder {
     symbol_source: SymbolSource,
+    precs: HashMap<Symbol, Prec>,
     rules: Vec<Rule>,
     symbols: SymbolSet,
 }
@@ -239,8 +285,8 @@ impl Builder {
     }
 
     /// Build a new rule for that grammar
-    pub fn rule(&mut self, rhs: Symbol) -> RulesBuilder {
-        RulesBuilder::new(rhs, self)
+    pub fn rule(&mut self, rhs: Symbol) -> RuleBuilder {
+        RuleBuilder::new(rhs, self)
     }
 
     /// Returns the next new sym
@@ -248,6 +294,11 @@ impl Builder {
         let s = self.symbol_source.next().unwrap();
         self.symbols.add(s);
         s
+    }
+
+    /// Set the precedence and associatity for a symbol
+    pub fn set_sym_prec(&mut self, sym: Symbol, prec: Option<usize>, assoc: Assoc) {
+        self.precs.insert(sym, Prec { prec, assoc });
     }
 
     /// Adds the epsilon symbol to the grammar and returns it
@@ -305,17 +356,29 @@ impl Builder {
     /// of the grammar.
     pub fn build(self, start: Option<Symbol>) -> Grammar {
         let start = start.unwrap_or_else(|| self.find_start());
+
+        let non_terminals = NonTerminals::compute(&self.rules);
+        let terminals = Terminals::compute(&non_terminals, &self.symbols);
+
+        for &sym in self.precs.keys() {
+            assert!(
+                terminals.contains(sym),
+                "precence can only be defined for terminal symbols, but {sym:?} is a non-terminal"
+            );
+        }
+
         Grammar {
             goal: start,
             rules: self.rules,
             symbols: self.symbols,
             follow_sets: OnceCell::new(),
-            non_terminals: OnceCell::new(),
-            terminals: OnceCell::new(),
+            non_terminals,
+            terminals,
             first_sets: OnceCell::new(),
             augmented_first_sets: OnceCell::new(),
             canonical_collection: OnceCell::new(),
             lr1_action_table: OnceCell::new(),
+            precs: self.precs,
         }
     }
 }

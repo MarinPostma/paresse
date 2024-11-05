@@ -1,5 +1,5 @@
 use super::symbol::Symbol;
-use super::Builder;
+use super::{Builder, Grammar};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Assoc {
@@ -11,8 +11,6 @@ pub enum Assoc {
 pub struct Rule {
     lhs: Symbol,
     rhs: Vec<Symbol>,
-    prec: Option<usize>,
-    assoc: Assoc,
 }
 
 impl Rule {
@@ -28,77 +26,50 @@ impl Rule {
         self.rhs.push(s)
     }
 
-    pub fn assoc(&self) -> Assoc {
-        self.assoc
+    /// returns the last non-terminal mentionned in this rule's rhs
+    pub fn last_non_terminal(&self, g: &Grammar) -> Option<Symbol> {
+        for &s in self.rhs().iter().rev() {
+            if g.is_terminal(s) {
+                return Some(s)
+            }
+        }
+
+        None
     }
 
-    pub fn precedence(&self) -> Option<usize> {
-        self.prec
+    /// Returns the associativity of this rule, if any
+    ///
+    /// The precedence of a rule is the precedence of the latest non-terminal that it mentions
+    pub fn assoc(&self, g: &Grammar) -> Option<Assoc> {
+        self.last_non_terminal(g).and_then(|s| g.assoc(s))
+    }
+
+    /// Returns the precedence of this rule, if any
+    ///
+    /// The precedence of a rule is the precedence of the latest non-terminal that it mentions
+    pub fn prec(&self, g: &Grammar) -> Option<usize> {
+        self.last_non_terminal(g).and_then(|s| g.prec(s))
     }
 }
 
 #[derive(Debug)]
-pub struct RulesBuilder<'g> {
+pub struct RuleBuilder<'g> {
     lhs: Symbol,
     grammar: &'g mut Builder,
 }
 
-pub struct RuleBuilder<'g> {
-    builder: RulesBuilder<'g>,
-    rhs: Vec<Symbol>,
-    assoc: Assoc,
-    prec: Option<usize>,
-}
 
 impl<'g> RuleBuilder<'g> {
-    pub fn is(self, syms: impl IntoIterator<Item = Symbol>) -> Self {
-        let rule = Rule {
-            lhs: self.builder.lhs,
-            rhs: self.rhs,
-            prec: self.prec,
-            assoc: Assoc::Left,
-        };
-        self.builder.grammar.rules.push(rule);
-        Self {
-            builder: self.builder,
-            rhs: syms.into_iter().collect(),
-            assoc: self.assoc,
-            prec: self.prec,
-        }
-    }
-
-    pub fn with_assoc(mut self, assoc: Assoc) -> Self {
-        self.assoc = assoc;
-        self
-    }
-
-    pub fn with_precedence(mut self, prec: usize) -> Self {
-        self.prec = Some(prec);
-        self
-    }
-
-    pub fn build(self) {
-        let rule = Rule {
-            lhs: self.builder.lhs,
-            rhs: self.rhs,
-            prec: self.prec,
-            assoc: Assoc::Left,
-        };
-        self.builder.grammar.rules.push(rule);
-    }
-}
-
-impl<'g> RulesBuilder<'g> {
     pub fn new(lhs: Symbol, grammar: &'g mut Builder) -> Self {
         Self { lhs, grammar }
     }
 
-    pub fn is(self, syms: impl IntoIterator<Item = Symbol>) -> RuleBuilder<'g> {
-        RuleBuilder {
-            builder: self,
+    pub fn is(self, syms: impl IntoIterator<Item = Symbol>) -> Self {
+        let rule = Rule {
+            lhs: self.lhs,
             rhs: syms.into_iter().collect(),
-            assoc: Assoc::Left,
-            prec: None,
-        }
+        };
+        self.grammar.rules.push(rule);
+        self
     }
 }

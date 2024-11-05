@@ -1,6 +1,7 @@
 //! This modules parses the content of the grammar macro into a raw GrammarAst, that can then be
 //! analyzed into a GrammarHir
 
+use paresse_core::grammar::Assoc;
 use quote::ToTokens;
 use syn::parse::Parse;
 use syn::punctuated::Punctuated;
@@ -226,13 +227,19 @@ impl Rule {
         self.rhs.handler.as_ref()
     }
 
+    /// A rule that is in the form rule = pat, where rule is all uppercase can be interpretted as a
+    /// named token definition, and there is no handler
+    pub fn matches_terminal_definition(&self) -> bool {
+        let is_rhs_pattern = self.rhs().syms().len() == 1
+        && self.rhs().syms().first().unwrap().kind().is_terminal();
+        is_rhs_pattern && self.handler().is_none()
+    }
+
     /// A rule that is in the form RULE = pat, where rule is all uppercase is interpretted as a
     /// named token definition, and there is no handler
     pub fn is_named_terminal_definition(&self) -> bool {
         let is_lhs_uppercase = self.lhs().to_string().chars().all(|c| c.is_uppercase());
-        let is_rhs_pattern = self.rhs().syms().len() == 1
-        && self.rhs().syms().first().unwrap().kind().is_terminal();
-        is_lhs_uppercase && is_rhs_pattern && self.handler().is_none()
+        is_lhs_uppercase && self.matches_terminal_definition() || self.attr().map(RuleAttrs::is_token).unwrap_or_default()
     }
 
     pub fn attr(&self) -> Option<&RuleAttrs> {
@@ -256,22 +263,41 @@ impl GrammarAst {
 }
 
 #[derive(Debug, Clone)]
-pub struct RuleAttr {
-    pub prec: Option<usize>
+pub struct RuleAttr { }
+
+#[derive(Debug, Clone)]
+pub struct TokenAttr { 
+    pub assoc: Assoc,
+    pub prec: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
 pub enum RuleAttrs {
-    Token,
+    Token(TokenAttr),
     Rule(RuleAttr),
 }
 
 impl RuleAttrs {
     pub(crate) fn as_rule(&self) -> Option<&RuleAttr> {
         match self {
-            RuleAttrs::Token => None,
+            RuleAttrs::Token(_) => None,
             RuleAttrs::Rule(ref r) => Some(r),
         }
+    }
+
+    pub(crate) fn as_token(&self) -> Option<&TokenAttr> {
+        match self {
+            RuleAttrs::Token(ref t) => Some(t),
+            RuleAttrs::Rule(_) => None,
+        }
+    }
+
+    /// Returns `true` if the rule attrs is [`Token`].
+    ///
+    /// [`Token`]: RuleAttrs::Token
+    #[must_use]
+    pub fn is_token(&self) -> bool {
+        matches!(self, Self::Token(..))
     }
 }
 
@@ -279,18 +305,19 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
     let attr = input.call(Attribute::parse_outer)?;
     match &attr[0].meta {
         syn::Meta::List(l)
-            if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "token" =>
+            if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "rule" =>
         {
-            todo!("token rule");
+            todo!("rule attr");
         }
         syn::Meta::List(l)
-            if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "rule" =>
+            if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "token" =>
         {
             let entries = l.parse_args_with(
                 Punctuated::<MetaNameValue, Token![,]>::parse_separated_nonempty,
             )?;
 
             let mut prec: Option<usize> = None;
+            let mut assoc = Assoc::Left;
             for entry in entries {
                 let name = entry.path.to_token_stream().to_string();
                 match name.as_str() {
@@ -307,6 +334,19 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
                             ))
                         }
                     }
+                    "assoc" => {
+                        match entry.value {
+                            Expr::Path(p) => {
+                                assoc = match p.to_token_stream().to_string().as_str() {
+                                    "left" => Assoc::Left,
+                                    "right" => Assoc::Right,
+                                    _ => return Err(syn::Error::new_spanned(p, "assoc must be `left` or `right`")),
+                                };
+                                    
+                            },
+                            _ => todo!(),
+                        }
+                    }
                     _ => {
                         return Err(syn::Error::new_spanned(
                             &entry.value,
@@ -318,7 +358,7 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
                     }
                 }
             }
-            Ok(RuleAttrs::Rule(RuleAttr{ prec }))
+            Ok(RuleAttrs::Token(TokenAttr{ prec, assoc }))
         }
         _ => {
             Err(syn::Error::new_spanned(
@@ -351,7 +391,11 @@ fn parse_rule(input: syn::parse::ParseStream, rules: &mut Vec<Rule>) -> syn::Res
             rules.push(Rule::new(lhs.clone(), rhs, attr));
         }
     } else {
-        rules.push(Rule::new(lhs, input.parse()?, rule_attr));
+        let rule = Rule::new(lhs.clone(), input.parse()?, rule_attr);
+        if rule.matches_terminal_definition() && !rule.attr().map(RuleAttrs::is_token).unwrap_or(true) {
+            return Err(syn::Error::new_spanned(lhs.clone(), format_args!("{lhs} doesn't match a token definition rule. Token definition rules are in the form <name> = <pat>")))
+        }
+        rules.push(rule);
     }
 
     input.parse::<Token![;]>()?;

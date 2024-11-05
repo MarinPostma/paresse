@@ -23,7 +23,7 @@ impl<'g> LR1Generator<'g> {
         self.grammar.grammar().lr1_action_table();
         let rules = self.gen_rules();
         let fallback = quote! {
-            _ => panic!("error!: {:?}", self.stack),
+            _ => panic!("error!"),
         };
         let goal_ty = self
             .grammar
@@ -32,7 +32,6 @@ impl<'g> LR1Generator<'g> {
             .unwrap();
         let non_terminals_enum = self.gen_non_terminals_enum();
         quote! {
-            #[derive(Debug)]
             enum StackItem {
                 State(u32),
                 Token(paresse::Token),
@@ -51,7 +50,7 @@ impl<'g> LR1Generator<'g> {
                 fn state(&self) -> u32 {
                     match self.stack.last() {
                         Some(StackItem::State(state)) => *state,
-                        _ => unreachable!("top of stack is not state, {:?}", self.stack),
+                        _ => unreachable!("top of stack is not state"),
                     }
                 }
 
@@ -115,7 +114,6 @@ impl<'g> LR1Generator<'g> {
             .idents()
             .map(|i| quote! { #i(#i) });
         quote! {
-            #[derive(Debug)]
             enum NonTerminals {
                 #(#variants,)*
             }
@@ -165,11 +163,8 @@ impl ToTokens for GenAccept<'_> {
         let from = self.from;
         let reduce = gen_reduce(self.rule);
 
-                // let name = format!("{} -> {:?}", self.rule.lhs().name, self.rule.rhs().iter().map(|s| &s.sym).collect::<Vec<_>>());
-
         quote! {
             (#from, None) => {
-                // println!("accept: {}", #name);
                 return #reduce;
             }
         }
@@ -203,7 +198,7 @@ impl GenReduce<'_> {
         quote! {
             let next = match state {
                 #(#transitions,)*
-                invalid => unreachable!("invalid transition {invalid}, {t:?}, {:?}", self.stack),
+                invalid => unreachable!("invalid transition {invalid}, {t:?}"),
             };
             self.stack.push(StackItem::State(next));
         }
@@ -227,15 +222,11 @@ impl ToTokens for GenReduce<'_> {
         let reduce = self.gen_reduce();
         let cci = self.from;
 
-        // let name = format!("{} -> {:?}", self.rule.lhs().name, self.rule.rhs().iter().map(|s| &s.sym).collect::<Vec<_>>());
-
         quote! {
             (#cci, t@#match_token) => {
-                // println!("reduce: {}", #name);
                 // reduce
                 #reduce
                 #state_trans
-                // println!("stack: {:?}", self.stack);
             }
         }
         .to_tokens(tokens)
@@ -257,7 +248,6 @@ impl ToTokens for GenShift {
             (#from, Some(t@#s)) => {
                 // shift
                 let current = self.advance().unwrap();
-                // println!("shift: {}, to: {}", self.tokens.lexeme(&current.span), #to);
                 self.stack.push(StackItem::Token(current));
                 self.stack.push(StackItem::State(#to));
             }

@@ -5,7 +5,7 @@ use paresse_core::grammar::Symbol as SymbolId;
 use quote::ToTokens;
 use syn::{Expr, Ident};
 
-use crate::parse::{Binding, GrammarAst, SymbolKind, TerminalKind};
+use crate::parse::{Binding, GrammarAst, RuleAttrs, SymbolKind, TerminalKind};
 
 #[derive(Debug)]
 pub struct NonTerminal {
@@ -193,6 +193,9 @@ impl<'a> GrammarBuilder<'a> {
                     rule.lhs()
                 );
                 let sym_id = self.builder.next_sym();
+                if let Some(attr) = rule.attr().and_then(RuleAttrs::as_token) {
+                    self.builder.set_sym_prec(sym_id, attr.prec, attr.assoc);
+                }
                 self.terminals
                     .insert(Some(rule.lhs().clone()), pat.clone(), sym_id);
             } else {
@@ -244,25 +247,16 @@ impl<'a> GrammarBuilder<'a> {
                 rhs.push(s);
             }
 
-            let builder = self.builder
+            self.builder
                 .rule(lhs.sym_id)
                 .is(rhs.iter().map(|s| s.sym.symbol_id()));
-            let builder = if let Some(prec) = rule.attr()
-                .and_then(|a| a.as_rule())
-                .and_then(|a| a.prec) {
-                builder.with_precedence(prec)
-            } else {
-                builder
-            };
-
-            builder.build();
-
 
             let rule = Rule {
                 lhs,
                 rhs,
                 handler: rule.handler().cloned(),
             };
+
             self.rules.push(rule);
         }
 
