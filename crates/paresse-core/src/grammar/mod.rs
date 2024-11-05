@@ -146,7 +146,9 @@ impl Grammar {
     pub fn rule_prec(&self, rule: usize) -> Option<usize> {
         match self.rule_precs.get(&rule) {
             Some(prec) => prec.prec,
-            None => self.rules[rule].last_terminal(self).and_then(|s| self.sym_prec(s))
+            None => self.rules[rule]
+                .last_terminal(self)
+                .and_then(|s| self.sym_prec(s)),
         }
     }
 }

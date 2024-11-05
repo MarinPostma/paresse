@@ -208,11 +208,7 @@ pub struct Rule {
 
 impl Rule {
     fn new(lhs: Ident, rhs: Rhs, attr: Option<RuleAttrs>) -> Self {
-        Self {
-            lhs,
-            rhs,
-            attr,
-        }
+        Self { lhs, rhs, attr }
     }
 
     pub(crate) fn lhs(&self) -> &Ident {
@@ -230,8 +226,8 @@ impl Rule {
     /// A rule that is in the form rule = pat, where rule is all uppercase can be interpretted as a
     /// named token definition, and there is no handler
     pub fn matches_terminal_definition(&self) -> bool {
-        let is_rhs_pattern = self.rhs().syms().len() == 1
-        && self.rhs().syms().first().unwrap().kind().is_terminal();
+        let is_rhs_pattern =
+            self.rhs().syms().len() == 1 && self.rhs().syms().first().unwrap().kind().is_terminal();
         is_rhs_pattern && self.handler().is_none()
     }
 
@@ -239,7 +235,8 @@ impl Rule {
     /// named token definition, and there is no handler
     pub fn is_named_terminal_definition(&self) -> bool {
         let is_lhs_uppercase = self.lhs().to_string().chars().all(|c| c.is_uppercase());
-        is_lhs_uppercase && self.matches_terminal_definition() || self.attr().map(RuleAttrs::is_token).unwrap_or_default()
+        is_lhs_uppercase && self.matches_terminal_definition()
+            || self.attr().map(RuleAttrs::is_token).unwrap_or_default()
     }
 
     pub fn attr(&self) -> Option<&RuleAttrs> {
@@ -263,10 +260,10 @@ impl GrammarAst {
 }
 
 #[derive(Debug, Clone)]
-pub struct RuleAttr { }
+pub struct RuleAttr {}
 
 #[derive(Debug, Clone)]
-pub struct TokenAttr { 
+pub struct TokenAttr {
     pub assoc: Assoc,
     pub prec: Option<usize>,
 }
@@ -333,20 +330,22 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
                                 format_args!("prec must be a literal integer"),
                             ))
                         }
-                    }
-                    "assoc" => {
-                        match entry.value {
-                            Expr::Path(p) => {
-                                assoc = match p.to_token_stream().to_string().as_str() {
-                                    "left" => Assoc::Left,
-                                    "right" => Assoc::Right,
-                                    _ => return Err(syn::Error::new_spanned(p, "assoc must be `left` or `right`")),
-                                };
-                                    
-                            },
-                            _ => todo!(),
+                    },
+                    "assoc" => match entry.value {
+                        Expr::Path(p) => {
+                            assoc = match p.to_token_stream().to_string().as_str() {
+                                "left" => Assoc::Left,
+                                "right" => Assoc::Right,
+                                _ => {
+                                    return Err(syn::Error::new_spanned(
+                                        p,
+                                        "assoc must be `left` or `right`",
+                                    ))
+                                }
+                            };
                         }
-                    }
+                        _ => todo!(),
+                    },
                     _ => {
                         return Err(syn::Error::new_spanned(
                             &entry.value,
@@ -358,14 +357,12 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
                     }
                 }
             }
-            Ok(RuleAttrs::Token(TokenAttr{ prec, assoc }))
+            Ok(RuleAttrs::Token(TokenAttr { prec, assoc }))
         }
-        _ => {
-            Err(syn::Error::new_spanned(
-                &attr[0],
-                "rule config in the form `#[rule(..)]` or `#[token(..)]`",
-            ))
-        }
+        _ => Err(syn::Error::new_spanned(
+            &attr[0],
+            "rule config in the form `#[rule(..)]` or `#[token(..)]`",
+        )),
     }
 }
 
@@ -392,8 +389,10 @@ fn parse_rule(input: syn::parse::ParseStream, rules: &mut Vec<Rule>) -> syn::Res
         }
     } else {
         let rule = Rule::new(lhs.clone(), input.parse()?, rule_attr);
-        if rule.matches_terminal_definition() && !rule.attr().map(RuleAttrs::is_token).unwrap_or(true) {
-            return Err(syn::Error::new_spanned(lhs.clone(), format_args!("{lhs} doesn't match a token definition rule. Token definition rules are in the form <name> = <pat>")))
+        if rule.matches_terminal_definition()
+            && !rule.attr().map(RuleAttrs::is_token).unwrap_or(true)
+        {
+            return Err(syn::Error::new_spanned(lhs.clone(), format_args!("{lhs} doesn't match a token definition rule. Token definition rules are in the form <name> = <pat>")));
         }
         rules.push(rule);
     }

@@ -115,7 +115,7 @@ impl Action {
     pub fn is_shift(&self) -> bool {
         matches!(self, Self::Shift { .. })
     }
-    
+
     pub(crate) fn is_reduce(&self) -> bool {
         matches!(self, Self::Reduce { .. })
     }

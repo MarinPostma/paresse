@@ -4,7 +4,7 @@ use super::{Builder, Grammar, Prec};
 #[derive(Debug, Clone, Copy)]
 pub enum Assoc {
     Left,
-    Right
+    Right,
 }
 
 #[derive(Debug, Clone)]
@@ -30,7 +30,7 @@ impl Rule {
     pub fn last_terminal(&self, g: &Grammar) -> Option<Symbol> {
         for &s in self.rhs().iter().rev() {
             if g.is_terminal(s) {
-                return Some(s)
+                return Some(s);
             }
         }
 
@@ -50,7 +50,6 @@ pub struct RuleBuilder<'g> {
     lhs: Symbol,
     grammar: &'g mut Builder,
 }
-
 
 impl<'g> RuleBuilder<'g> {
     pub fn new(lhs: Symbol, grammar: &'g mut Builder) -> Self {
@@ -73,7 +72,7 @@ impl<'g> RuleBuilder<'g> {
         };
         let rule_id = self.grammar.rules.len();
         self.grammar.rules.push(rule);
-        self.grammar.rule_precs.insert(rule_id,prec);
+        self.grammar.rule_precs.insert(rule_id, prec);
         self
     }
 }

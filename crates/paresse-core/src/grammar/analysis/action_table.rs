@@ -1,5 +1,5 @@
-use std::collections::{hash_map::Entry, HashMap};
 use std::cmp::Ordering;
+use std::collections::{hash_map::Entry, HashMap};
 
 use crate::grammar::{Assoc, Grammar, Symbol};
 
@@ -89,7 +89,11 @@ impl LR1ActionTable {
                 }
                 _ => (),
             },
-            None => todo!("no prec for rules {} and {}", prev.item.rule_id(), new.item.rule_id()),
+            None => todo!(
+                "no prec for rules {} and {}",
+                prev.item.rule_id(),
+                new.item.rule_id()
+            ),
         }
     }
 
@@ -128,4 +132,3 @@ impl LR1ActionTable {
         prev.action.is_reduce() && new.action.is_reduce()
     }
 }
-
