@@ -45,6 +45,7 @@ impl Symbol {
 pub struct MaybeBoundSymbol {
     pub binding: Option<Binding>,
     pub sym: Symbol,
+    pub tokens: proc_macro2::TokenStream,
 }
 
 pub struct Rule {
@@ -242,6 +243,7 @@ impl<'a> GrammarBuilder<'a> {
                 let s = MaybeBoundSymbol {
                     sym: s,
                     binding: sym.binding().cloned(),
+                    tokens: sym.tokens.clone(),
                 };
 
                 rhs.push(s);

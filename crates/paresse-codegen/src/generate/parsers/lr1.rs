@@ -20,7 +20,6 @@ impl<'g> LR1Generator<'g> {
     }
 
     pub fn generate(&self) -> impl ToTokens {
-        self.grammar.grammar().lr1_action_table();
         let rules = self.gen_rules();
         let fallback = quote! {
             _ => panic!("error!"),
@@ -96,8 +95,8 @@ impl<'g> LR1Generator<'g> {
     fn gen_rule(&self, cci: u32) -> impl ToTokens {
         let actions = match self.grammar.grammar().lr1_action_table() {
             Ok(t) => t.actions(cci),
-            Err(ActionTableError::UnhandledShiftReduce { rule1, rule2 }) => todo!(),
-            Err(ActionTableError::UnhandledReduceReduce { rule1, rule2 }) => todo!(),
+            Err(ActionTableError::UnhandledShiftReduce { .. }) => todo!(),
+            Err(ActionTableError::UnhandledReduceReduce { .. }) => todo!(),
         };
 
         let t_rules = actions.into_iter().map(|(_s, action)| GenAction {

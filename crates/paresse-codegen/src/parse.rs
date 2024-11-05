@@ -73,6 +73,7 @@ impl Parse for SymbolKind {
 pub struct Symbol {
     binding: Option<Binding>,
     kind: SymbolKind,
+    pub tokens: proc_macro2::TokenStream,
 }
 
 #[derive(Clone, Debug)]
@@ -107,30 +108,34 @@ impl Symbol {
 
 impl Parse for Symbol {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut tokens = Default::default();
         let lookahead = input.lookahead1();
         // this is a named binding
         if lookahead.peek(Token![<]) {
-            input.parse::<Token![<]>()?;
+            input.parse::<Token![<]>()?.to_tokens(&mut tokens);
             let mutable = if input.peek(Token![mut]) {
-                input.parse::<Token![mut]>()?;
+                input.parse::<Token![mut]>()?.to_tokens(&mut tokens);
                 true
             } else {
                 false
             };
 
             let name = input.parse::<Ident>()?;
-            input.parse::<Token![:]>()?;
+            name.to_tokens(&mut tokens);
+            input.parse::<Token![:]>()?.to_tokens(&mut tokens);
             let kind = input.parse::<SymbolKind>()?;
-            input.parse::<Token![>]>()?;
+            input.parse::<Token![>]>()?.to_tokens(&mut tokens);
             Ok(Self {
                 binding: Some(Binding::new(name, mutable)),
                 kind,
+                tokens,
             })
         } else if lookahead.peek(Ident) || lookahead.peek(LitStr) {
             let kind = input.parse::<SymbolKind>()?;
             Ok(Self {
                 binding: None,
                 kind,
+                tokens,
             })
         } else {
             panic!("invalid symbol")
