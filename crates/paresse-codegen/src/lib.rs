@@ -47,8 +47,18 @@ fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
 
     let parser: &dyn ToTokens = match ast.config().parser_flavor {
         ParserFlavor::Ll1 => &generate::parsers::ll1::LL1Generator::new(&grammar)?,
-        ParserFlavor::Lr1 => &generate::parsers::lr1::LR1Generator::new(&grammar)?,
-        ParserFlavor::DummyLr1 => &generate::parsers::dummy_lr1::DummyLR1Generator::new(&grammar)?,
+        ParserFlavor::Lr1 => {
+            if let Ok(t) = grammar.grammar().lr1_action_table() {
+                println!("generating {} states", t.num_states());
+            }
+            &generate::parsers::lr1::LR1Generator::new(&grammar)?
+        },
+        ParserFlavor::DummyLr1 => {
+            if let Ok(t) = grammar.grammar().lr1_action_table() {
+                println!("generating {} states", t.num_states());
+            }
+            &generate::parsers::dummy_lr1::DummyLR1Generator::new(&grammar)?
+        },
     };
 
     println!("generated grammar in {:?}", before.elapsed());

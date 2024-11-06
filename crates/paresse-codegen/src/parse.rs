@@ -517,7 +517,7 @@ fn parse_config(input: syn::parse::ParseStream, config: &mut Config) -> syn::Res
                             if ["ll1", "lr1", "dummy_lr1"]
                                 .contains(&p.to_token_stream().to_string().as_str()) =>
                         {
-                            match dbg!(p.to_token_stream().to_string().as_str()) {
+                            match p.to_token_stream().to_string().as_str() {
                                 "ll1" => config.parser_flavor = ParserFlavor::Ll1,
                                 "lr1" => config.parser_flavor = ParserFlavor::Lr1,
                                 "dummy_lr1" => config.parser_flavor = ParserFlavor::DummyLr1,

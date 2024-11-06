@@ -22,6 +22,10 @@ struct ActionTableSlot {
 }
 
 impl LR1ActionTable {
+    pub fn num_states(&self) -> usize {
+        self.actions.iter().map(|a| a.len()).sum()
+    }
+
     /// Fixme: handle error in table construction
     pub fn compute(g: &Grammar) -> Result<Self, ActionTableError> {
         let cc = g.canonical_collection();
@@ -84,21 +88,21 @@ impl LR1ActionTable {
                     rule1: prev.item.rule_id(),
                     rule2: new.item.rule_id(),
                 })
-            },
+            }
             (None, Some(_)) => {
                 // new has a higher prio
                 *prev = new;
-            },
+            }
             (Some(p), Some(n)) if n > p => {
                 *prev = new;
-            },
+            }
             (Some(p), Some(n)) if n == p => {
                 // cannot break tie between two rules
                 return Err(ActionTableError::UnhandledReduceReduce {
                     rule1: prev.item.rule_id(),
                     rule2: new.item.rule_id(),
-                })
-            },
+                });
+            }
             _ => (),
         }
 
