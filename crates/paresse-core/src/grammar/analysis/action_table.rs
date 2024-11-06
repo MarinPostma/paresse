@@ -76,10 +76,33 @@ impl LR1ActionTable {
         prev: &mut ActionTableSlot,
         new: ActionTableSlot,
     ) -> Result<(), ActionTableError> {
-        Err(ActionTableError::UnhandledReduceReduce {
-            rule1: prev.item.rule_id(),
-            rule2: new.item.rule_id(),
-        })
+        let prev_prio = g.rule_priority(prev.item.rule_id());
+        let new_prio = g.rule_priority(new.item.rule_id());
+        match (prev_prio, new_prio) {
+            (None, None) => {
+                return Err(ActionTableError::UnhandledReduceReduce {
+                    rule1: prev.item.rule_id(),
+                    rule2: new.item.rule_id(),
+                })
+            },
+            (None, Some(_)) => {
+                // new has a higher prio
+                *prev = new;
+            },
+            (Some(p), Some(n)) if n > p => {
+                *prev = new;
+            },
+            (Some(p), Some(n)) if n == p => {
+                // cannot break tie between two rules
+                return Err(ActionTableError::UnhandledReduceReduce {
+                    rule1: prev.item.rule_id(),
+                    rule2: new.item.rule_id(),
+                })
+            },
+            _ => (),
+        }
+
+        Ok(())
     }
 
     fn handle_shit_reduce(
