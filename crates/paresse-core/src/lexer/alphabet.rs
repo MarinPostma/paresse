@@ -46,17 +46,25 @@ impl Display for Unit {
 pub struct ByteSet([u128; 2]);
 
 impl ByteSet {
-    pub(crate) fn empty() -> Self {
+    pub const fn from_raw(i: [u128; 2]) -> Self {
+        Self(i)
+    }
+
+    pub fn into_raw(self) -> [u128; 2] {
+        self.0
+    }
+
+    pub fn empty() -> Self {
         Self([0, 0])
     }
 
-    pub(crate) fn add(&mut self, byte: u8) {
+    pub fn add(&mut self, byte: u8) {
         let bucket = byte / 128;
         let bit = byte % 128;
         self.0[bucket as usize] |= 1 << bit as u128
     }
 
-    pub(crate) fn contains(&self, byte: u8) -> bool {
+    pub fn contains(&self, byte: u8) -> bool {
         let bucket = byte / 128;
         let bit = byte % 128;
         self.0[usize::from(bucket)] & (1 << bit) > 0
@@ -71,8 +79,12 @@ impl ByteSet {
         ByteSetIter::new(self)
     }
 
-    pub(crate) fn len(&self) -> u32 {
+    pub fn len(&self) -> u32 {
         self.0[0].count_ones() + self.0[1].count_ones()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0 == [0, 0]
     }
 }
 

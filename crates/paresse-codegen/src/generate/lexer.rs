@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use paresse_core::lexer::Unit;
+use paresse_core::lexer::{ByteSet, Unit};
 use paresse_core::lexer::{Scanner, ScannerBuilder};
 use quote::{format_ident, quote, ToTokens};
 use syn::Ident;
@@ -162,21 +162,46 @@ impl LexerGenerator {
 
             let pat = state_ident(state);
             let inner_arms = targets.iter().map(|(target, units)| {
-                let pats = units.iter().map(|u| match u {
-                    Unit::Boi => quote!(paresse::Unit::Boi),
-                    Unit::Eoi => quote!(paresse::Unit::Eoi),
-                    Unit::Byte(i) => quote!(paresse::Unit::Byte(#i)),
+                let mut s = ByteSet::empty();
+                let mut has_boi = false;
+                let mut has_eoi = false;
+
+                units.iter().for_each(|u| match u {
+                    Unit::Boi => { has_boi = true; },
+                    Unit::Eoi => { has_eoi = true; },
+                    Unit::Byte(i) => { s.add(*i); },
                 });
 
+                let eoi_branch = has_eoi.then_some(quote! { paresse::Unit::Eoi });
+                let boi_branch = has_boi.then_some(quote! { paresse::Unit::Boi });
+                let spec_pats = eoi_branch.into_iter().chain(boi_branch);
+
                 let target = state_ident(*target);
+
+                let spec_branch = if has_eoi || has_boi {
+                    quote! { #(#spec_pats)|* => Some(__State::#target), }
+                } else  {
+                    quote! { }
+                };
+
+                let char_branch = if !s.is_empty() {
+                    let [r1, r2] = s.into_raw();
+                    quote! {
+                        paresse::Unit::Byte(c) if paresse::ByteSet::from_raw([#r1, #r2]).contains(c) => Some(__State::#target),
+                    }
+                } else {
+                    quote! {}
+                };
+
                 quote! {
-                    #(#pats)|* => Some(__State::#target)
+                    #spec_branch
+                    #char_branch
                 }
             });
             let arm = quote! {
                 __State::#pat => {
                     match u {
-                        #(#inner_arms,)*
+                        #(#inner_arms)*
                         _ => None,
                     }
                 }
@@ -199,7 +224,7 @@ impl LexerGenerator {
         let state_variants = dfa.states_iter().map(state_ident).collect::<Vec<_>>();
 
         quote! {
-            #[derive(Clone, Copy, Debug)]
+            #[derive(Clone, Copy)]
             enum __State {
                 #(#state_variants,)*
             }
