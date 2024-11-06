@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use paresse_core::grammar::{Prec, Symbol as SymbolId};
+use paresse_core::grammar::Symbol as SymbolId;
 use quote::ToTokens;
 use syn::{Expr, Ident};
 
@@ -258,7 +258,7 @@ impl<'a> GrammarBuilder<'a> {
             if let Some(attr) = rule.attr().and_then(RuleAttrs::as_rule) {
                 self.builder
                     .rule(lhs.sym_id)
-                    .is_precedence(rhs.iter().map(|s| s.sym.symbol_id()), Prec {
+                    .is_precedence(rhs.iter().map(|s| s.sym.symbol_id()), paresse_core::grammar::RuleAttrs {
                         assoc: attr.assoc,
                         prec: attr.prec,
                     });

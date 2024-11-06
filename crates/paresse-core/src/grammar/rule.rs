@@ -1,5 +1,5 @@
 use super::symbol::Symbol;
-use super::{Builder, Grammar, Prec};
+use super::{Builder, Grammar, RuleAttrs};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Assoc {
@@ -65,14 +65,14 @@ impl<'g> RuleBuilder<'g> {
         self
     }
 
-    pub fn is_precedence(self, syms: impl IntoIterator<Item = Symbol>, prec: Prec) -> Self {
+    pub fn is_precedence(self, syms: impl IntoIterator<Item = Symbol>, prec: RuleAttrs) -> Self {
         let rule = Rule {
             lhs: self.lhs,
             rhs: syms.into_iter().collect(),
         };
         let rule_id = self.grammar.rules.len();
         self.grammar.rules.push(rule);
-        self.grammar.rule_precs.insert(rule_id, prec);
+        self.grammar.rule_attrs.insert(rule_id, prec);
         self
     }
 }
