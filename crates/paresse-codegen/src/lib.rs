@@ -1,3 +1,4 @@
+use config::ParserFlavor;
 use parse::GrammarAst;
 use proc_macro::TokenStream;
 use quote::ToTokens;
@@ -36,12 +37,18 @@ pub fn grammar(input: TokenStream) -> TokenStream {
 fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
     let before = std::time::Instant::now();
     let grammar = crate::hir::GrammarBuilder::new(&ast).build()?;
-    let lexer = generate::lexer::LexerGenerator::new(&grammar);
+    let lexer: &dyn ToTokens = match ast.config().parser_flavor {
+        // skip generating a lexer for dummy parsers
+        ParserFlavor::DummyLr1 => &quote::quote! {},
+        _ => {
+            &generate::lexer::LexerGenerator::new(&grammar)
+        }
+    };
 
     let parser: &dyn ToTokens = match ast.config().parser_flavor {
-        config::ParserFlavor::Ll1 => &generate::parsers::ll1::LL1Generator::new(&grammar)?,
-        config::ParserFlavor::Lr1 => &generate::parsers::lr1::LR1Generator::new(&grammar)?,
-        config::ParserFlavor::DummyLr1 => &generate::parsers::dummy_lr1::DummyLR1Generator::new(&grammar)?,
+        ParserFlavor::Ll1 => &generate::parsers::ll1::LL1Generator::new(&grammar)?,
+        ParserFlavor::Lr1 => &generate::parsers::lr1::LR1Generator::new(&grammar)?,
+        ParserFlavor::DummyLr1 => &generate::parsers::dummy_lr1::DummyLR1Generator::new(&grammar)?,
     };
 
     println!("generated grammar in {:?}", before.elapsed());
