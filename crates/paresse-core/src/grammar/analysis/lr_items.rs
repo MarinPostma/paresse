@@ -357,8 +357,10 @@ mod test {
         let grammar = builder.build(None);
 
         let mut cc0 = LrItems::from_iter(Some(LrItem {
-            rule: 0,
-            placeholder: 0,
+            kernel: Kernel { 
+                rule: 0,
+                placeholder: 0,
+            },
             lookahead: eof,
         }));
 
@@ -400,8 +402,10 @@ mod test {
         let grammar = builder.build(None);
 
         let mut cc0 = LrItems::from_iter(Some(LrItem {
-            rule: 0,
-            placeholder: 0,
+            kernel: Kernel { 
+                rule: 0,
+                placeholder: 0,
+            },
             lookahead: eof,
         }));
 
