@@ -40,9 +40,7 @@ fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
     let lexer: &dyn ToTokens = match ast.config().parser_flavor {
         // skip generating a lexer for dummy parsers
         ParserFlavor::DummyLr1 => &quote::quote! {},
-        _ => {
-            &generate::lexer::LexerGenerator::new(&grammar)
-        }
+        _ => &generate::lexer::LexerGenerator::new(&grammar),
     };
 
     let parser: &dyn ToTokens = match ast.config().parser_flavor {
@@ -52,13 +50,13 @@ fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
                 println!("generating {} states", t.num_states());
             }
             &generate::parsers::lr1::LR1Generator::new(&grammar)?
-        },
+        }
         ParserFlavor::DummyLr1 => {
             if let Ok(t) = grammar.grammar().lr1_action_table() {
                 println!("generating {} states", t.num_states());
             }
             &generate::parsers::dummy_lr1::DummyLR1Generator::new(&grammar)?
-        },
+        }
     };
 
     println!("generated grammar in {:?}", before.elapsed());

@@ -7,5 +7,5 @@ pub mod lexer;
 pub mod prelude {
     pub use crate::error::{Error, ParseError};
     pub use crate::lexer::error::{ScanError, ScanErrorKind};
-    pub use crate::lexer::{Span, Token, Unit, ByteSet};
+    pub use crate::lexer::{ByteSet, Span, Token, Unit};
 }

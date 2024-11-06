@@ -1,5 +1,5 @@
-use paresse_core::grammar::{ActionTableError, Symbol as SymbolId};
 use paresse_core::grammar::{Action, CanonicalCollections};
+use paresse_core::grammar::{ActionTableError, Symbol as SymbolId};
 use quote::{format_ident, quote, ToTokens};
 
 use crate::hir::{self, GrammarHir, Rule, Symbol};
@@ -108,8 +108,12 @@ impl<'g> LR1Generator<'g> {
                 rule2.rhs_tokens(&mut tokens2);
                 return Err(syn::Error::new_spanned(
                     &tokens,
-                    format_args!("shift/reduce conflict between:\n\t- {}\n\t- {}", tokens, tokens2)));
-            },
+                    format_args!(
+                        "shift/reduce conflict between:\n\t- {}\n\t- {}",
+                        tokens, tokens2
+                    ),
+                ));
+            }
             Err(ActionTableError::UnhandledReduceReduce { rule2, rule1 }) => {
                 let rule1 = &self.grammar.rules()[rule1];
                 let rule2 = &self.grammar.rules()[rule2];
@@ -119,8 +123,12 @@ impl<'g> LR1Generator<'g> {
                 rule2.rhs_tokens(&mut tokens2);
                 return Err(syn::Error::new_spanned(
                     &tokens,
-                    format_args!("reduce/reduce conflict between:\n\t- {}\n\t- {}", tokens, tokens2)));
-            },
+                    format_args!(
+                        "reduce/reduce conflict between:\n\t- {}\n\t- {}",
+                        tokens, tokens2
+                    ),
+                ));
+            }
         };
 
         let t_rules = actions.into_iter().map(|(_s, action)| GenAction {
@@ -245,7 +253,7 @@ impl GenReduce<'_> {
                 #state_trans
             }
         };
-        
+
         quote! {
             #reduce_fn
             #reduce_fn_name(self, t);

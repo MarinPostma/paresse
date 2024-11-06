@@ -228,7 +228,7 @@ mod dummy {
     type Expr = u64;
     type Num = u64;
     type Goal = u64;
-    grammar!{
+    grammar! {
         #![config(parser_flavor = dummy_lr1)]
         Goal = Expr;
         Expr = <n:Num> => n;

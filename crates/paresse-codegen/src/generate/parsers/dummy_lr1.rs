@@ -1,7 +1,7 @@
 use paresse_core::grammar::ActionTableError;
 use quote::format_ident;
-use quote::ToTokens;
 use quote::quote;
+use quote::ToTokens;
 
 use crate::hir::GrammarHir;
 
@@ -50,8 +50,12 @@ impl<'g> DummyLR1Generator<'g> {
                 rule2.rhs_tokens(&mut tokens2);
                 return Err(syn::Error::new_spanned(
                     &tokens,
-                    format_args!("shift/reduce conflict between:\n\t- {}\n\t- {}", tokens, tokens2)));
-            },
+                    format_args!(
+                        "shift/reduce conflict between:\n\t- {}\n\t- {}",
+                        tokens, tokens2
+                    ),
+                ));
+            }
             Err(ActionTableError::UnhandledReduceReduce { rule2, rule1 }) => {
                 let rule1 = &self.grammar.rules()[rule1];
                 let rule2 = &self.grammar.rules()[rule2];
@@ -61,8 +65,12 @@ impl<'g> DummyLR1Generator<'g> {
                 rule2.rhs_tokens(&mut tokens2);
                 return Err(syn::Error::new_spanned(
                     &tokens,
-                    format_args!("reduce/reduce conflict between:\n\t- {}\n\t- {}", tokens, tokens2)));
-            },
+                    format_args!(
+                        "reduce/reduce conflict between:\n\t- {}\n\t- {}",
+                        tokens, tokens2
+                    ),
+                ));
+            }
         };
 
         let handlers = actions.filter_map(|(l, a)| {
@@ -72,26 +80,21 @@ impl<'g> DummyLR1Generator<'g> {
                 _ => return None,
             };
             let rule = self.grammar.rule(rule_id);
-            let bindings = rule
-                .rhs()
-                .iter()
-                .filter(|r| r.binding.is_some())
-                .map(|r| {
-                    let n = r.binding.as_ref().unwrap().name();
-                    let ty = match r.sym.ty() {
-                        Some(ty) => quote! { #ty },
-                        None => quote! { &str },
+            let bindings = rule.rhs().iter().filter(|r| r.binding.is_some()).map(|r| {
+                let n = r.binding.as_ref().unwrap().name();
+                let ty = match r.sym.ty() {
+                    Some(ty) => quote! { #ty },
+                    None => quote! { &str },
+                };
 
-                    };
+                let mutable = if r.binding.as_ref().unwrap().is_mutable() {
+                    quote! { mut }
+                } else {
+                    quote! {}
+                };
 
-                    let mutable = if r.binding.as_ref().unwrap().is_mutable() {
-                        quote! { mut }
-                    } else {
-                        quote! {}
-                    };
-
-                    quote! { let #mutable #n: #ty = __make_value(); }
-                });
+                quote! { let #mutable #n: #ty = __make_value(); }
+            });
             let handler = match rule.handler {
                 None => quote! { std::default::Default::default() },
                 Some(ref e) => {

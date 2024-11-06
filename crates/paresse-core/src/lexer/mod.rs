@@ -11,7 +11,7 @@ pub mod error;
 mod nfa;
 mod parser;
 
-pub use alphabet::{Unit, ByteSet};
+pub use alphabet::{ByteSet, Unit};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Token {

@@ -25,10 +25,7 @@ pub struct LrItem {
 impl LrItem {
     pub fn new(rule: usize, placeholder: usize, lookahead: Symbol) -> Self {
         Self {
-            kernel: Kernel {
-                rule,
-                placeholder,
-            },
+            kernel: Kernel { rule, placeholder },
             lookahead,
         }
     }
@@ -101,7 +98,9 @@ impl LrItem {
             }
             Action::Error
         } else if self.lookahead == Symbol::eof() && self.rule(g).lhs() == g.goal() {
-            Action::Accept { rule: self.rule_id() }
+            Action::Accept {
+                rule: self.rule_id(),
+            }
         } else {
             Action::Reduce {
                 rule: self.rule_id(),
@@ -357,7 +356,7 @@ mod test {
         let grammar = builder.build(None);
 
         let mut cc0 = LrItems::from_iter(Some(LrItem {
-            kernel: Kernel { 
+            kernel: Kernel {
                 rule: 0,
                 placeholder: 0,
             },
@@ -402,7 +401,7 @@ mod test {
         let grammar = builder.build(None);
 
         let mut cc0 = LrItems::from_iter(Some(LrItem {
-            kernel: Kernel { 
+            kernel: Kernel {
                 rule: 0,
                 placeholder: 0,
             },

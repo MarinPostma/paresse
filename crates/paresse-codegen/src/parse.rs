@@ -397,7 +397,11 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
                 }
             }
 
-            Ok(RuleAttrs::Rule(RuleAttr { prec, assoc, priority }))
+            Ok(RuleAttrs::Rule(RuleAttr {
+                prec,
+                assoc,
+                priority,
+            }))
         }
         syn::Meta::List(l)
             if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "token" =>
