@@ -18,8 +18,15 @@ pub struct SymAttrs {
 
 #[derive(Debug, Clone, Copy)]
 pub struct RuleAttrs {
+    /// Associativity override for the rule.
     pub assoc: Assoc,
+    /// Precedence override for the rule. Normally, assoc and prec are inherited from the latest
+    /// terminal in the rule, but we can override this behaviour with this setting
     pub prec: Option<usize>,
+    /// This is similar to precedence, but applies to reduce/reduce conflict. If a r/r conflict
+    /// aoocurs, the rule with the highest priority is selected. If no rule has a priority, the
+    /// conflict is left unresolved, and an error is reported.
+    pub priority: Option<usize>,
 }
 
 pub struct Grammar {

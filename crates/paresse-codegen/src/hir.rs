@@ -261,6 +261,7 @@ impl<'a> GrammarBuilder<'a> {
                     .is_precedence(rhs.iter().map(|s| s.sym.symbol_id()), paresse_core::grammar::RuleAttrs {
                         assoc: attr.assoc,
                         prec: attr.prec,
+                        priority: None,
                     });
             } else {
                 self.builder
