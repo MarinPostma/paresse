@@ -166,6 +166,11 @@ impl Grammar {
                 .and_then(|s| self.sym_prec(s)),
         }
     }
+
+    /// Returns the priority for the passed rule, if any
+    pub fn rule_priority(&self, rule: usize) -> Option<usize> {
+        self.rule_attrs.get(&rule).and_then(|a| a.priority)
+    }
 }
 
 #[derive(Default, Debug)]
