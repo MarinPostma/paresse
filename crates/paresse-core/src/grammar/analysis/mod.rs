@@ -5,6 +5,7 @@ mod follow_sets;
 mod lr_items;
 mod non_terminals;
 mod terminals;
+mod lalr1_action_table;
 
 pub use lr1_action_table::{ActionTableError, LR1ActionTable};
 pub use augmented_first_sets::AugmentedFirstSets;

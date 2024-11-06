@@ -5,8 +5,8 @@ use crate::{
     grammar::{rule::Rule, Grammar, Symbol, SymbolSet},
 };
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-struct Kernel {
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, Hash)]
+pub struct Kernel {
     /// rule id in the grammar
     rule: usize,
     /// position of the placeholder in the rule, iow, the current position in rule.rhs in a derivation of
@@ -30,7 +30,7 @@ impl LrItem {
         }
     }
 
-    fn kernel(&self) -> &Kernel {
+    pub fn kernel(&self) -> &Kernel {
         &self.kernel
     }
 
