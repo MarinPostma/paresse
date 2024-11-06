@@ -76,8 +76,14 @@ impl Rule {
         &self.lhs
     }
 
-    pub(crate) fn rhs(&self) -> &[MaybeBoundSymbol] {
+    pub fn rhs(&self) -> &[MaybeBoundSymbol] {
         &self.rhs
+    }
+
+    pub fn rhs_tokens(&self, token_stream: &mut proc_macro2::TokenStream) {
+        for sym in self.rhs() {
+            token_stream.extend(sym.tokens.clone());
+        }
     }
 }
 

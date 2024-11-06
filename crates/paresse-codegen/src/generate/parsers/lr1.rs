@@ -10,7 +10,10 @@ pub struct LR1Generator<'g> {
 
 impl<'g> ToTokens for LR1Generator<'g> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        self.generate().to_tokens(tokens)
+        match self.generate() {
+            Ok(tt) => tt.to_tokens(tokens),
+            Err(e) => tokens.extend(e.to_compile_error()),
+        }
     }
 }
 
@@ -19,8 +22,8 @@ impl<'g> LR1Generator<'g> {
         Ok(Self { grammar })
     }
 
-    pub fn generate(&self) -> impl ToTokens {
-        let rules = self.gen_rules();
+    pub fn generate(&self) -> syn::Result<impl ToTokens> {
+        let rules = self.gen_rules()?;
         let fallback = quote! {
             _ => panic!("error!"),
         };
@@ -30,7 +33,7 @@ impl<'g> LR1Generator<'g> {
             .get_ident(self.grammar.grammar().goal())
             .unwrap();
         let non_terminals_enum = self.gen_non_terminals_enum();
-        quote! {
+        Ok(quote! {
             enum StackItem {
                 State(u32),
                 Token(paresse::Token),
@@ -80,23 +83,44 @@ impl<'g> LR1Generator<'g> {
                     parser.run_parse()
                 }
             }
-        }
+        })
     }
 
-    fn gen_rules(&self) -> impl ToTokens {
+    fn gen_rules(&self) -> syn::Result<impl ToTokens> {
         let rules = (0..self.grammar.grammar().canonical_collection().len())
-            .map(|i| self.gen_rule(i as u32));
+            .map(|i| self.gen_rule(i as u32))
+            .collect::<syn::Result<Vec<_>>>()?;
 
-        quote! {
+        Ok(quote! {
             #(#rules)*
-        }
+        })
     }
 
-    fn gen_rule(&self, cci: u32) -> impl ToTokens {
+    fn gen_rule(&self, cci: u32) -> syn::Result<impl ToTokens> {
         let actions = match self.grammar.grammar().lr1_action_table() {
             Ok(t) => t.actions(cci),
-            Err(ActionTableError::UnhandledShiftReduce { .. }) => todo!(),
-            Err(ActionTableError::UnhandledReduceReduce { .. }) => todo!(),
+            Err(ActionTableError::UnhandledShiftReduce { rule1, rule2 }) => {
+                let rule1 = &self.grammar.rules()[rule1];
+                let rule2 = &self.grammar.rules()[rule2];
+                let mut tokens = Default::default();
+                rule1.rhs_tokens(&mut tokens);
+                let mut tokens2 = Default::default();
+                rule2.rhs_tokens(&mut tokens2);
+                return Err(syn::Error::new_spanned(
+                    &tokens,
+                    format_args!("shift/reduce conflict between:\n\t- {}\n\t- {}", tokens, tokens2)));
+            },
+            Err(ActionTableError::UnhandledReduceReduce { rule2, rule1 }) => {
+                let rule1 = &self.grammar.rules()[rule1];
+                let rule2 = &self.grammar.rules()[rule2];
+                let mut tokens = Default::default();
+                rule1.rhs_tokens(&mut tokens);
+                let mut tokens2 = Default::default();
+                rule2.rhs_tokens(&mut tokens2);
+                return Err(syn::Error::new_spanned(
+                    &tokens,
+                    format_args!("reduce/reduce conflict between:\n\t- {}\n\t- {}", tokens, tokens2)));
+            },
         };
 
         let t_rules = actions.into_iter().map(|(_s, action)| GenAction {
@@ -105,9 +129,9 @@ impl<'g> LR1Generator<'g> {
             grammar: self.grammar,
         });
 
-        quote! {
+        Ok(quote! {
             #(#t_rules)*
-        }
+        })
     }
 
     fn gen_non_terminals_enum(&self) -> impl ToTokens {

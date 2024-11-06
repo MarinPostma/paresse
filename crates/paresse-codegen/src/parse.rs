@@ -28,6 +28,11 @@ impl TerminalKind {
     }
 }
 
+struct SpannedSymbolKind {
+    tokens: proc_macro2::TokenStream,
+    kind: SymbolKind,
+}
+
 pub enum SymbolKind {
     Terminal(TerminalKind),
     Nonterminal(Ident),
@@ -51,19 +56,31 @@ impl SymbolKind {
     }
 }
 
-impl Parse for SymbolKind {
+impl Parse for SpannedSymbolKind {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut tokens = Default::default();
         let lookahead = input.lookahead1();
         if lookahead.peek(LitStr) {
             let pat = input.parse::<LitStr>()?.value();
+            pat.to_tokens(&mut tokens);
             if pat.is_empty() {
-                Ok(Self::Terminal(TerminalKind::Epsilon))
+                Ok(Self {
+                    tokens,
+                    kind: SymbolKind::Terminal(TerminalKind::Epsilon),
+                })
             } else {
-                Ok(Self::Terminal(TerminalKind::Pattern(pat)))
+                Ok(Self {
+                    tokens,
+                    kind: SymbolKind::Terminal(TerminalKind::Pattern(pat)),
+                })
             }
         } else if lookahead.peek(Ident) {
             let nt = input.parse::<Ident>()?;
-            Ok(Self::Nonterminal(nt))
+            nt.to_tokens(&mut tokens);
+            Ok(Self {
+                tokens,
+                kind: SymbolKind::Nonterminal(nt),
+            })
         } else {
             panic!()
         }
@@ -123,7 +140,8 @@ impl Parse for Symbol {
             let name = input.parse::<Ident>()?;
             name.to_tokens(&mut tokens);
             input.parse::<Token![:]>()?.to_tokens(&mut tokens);
-            let kind = input.parse::<SymbolKind>()?;
+            let SpannedSymbolKind { tokens: tt, kind } = input.parse::<SpannedSymbolKind>()?;
+            tokens.extend(tt);
             input.parse::<Token![>]>()?.to_tokens(&mut tokens);
             Ok(Self {
                 binding: Some(Binding::new(name, mutable)),
@@ -131,7 +149,8 @@ impl Parse for Symbol {
                 tokens,
             })
         } else if lookahead.peek(Ident) || lookahead.peek(LitStr) {
-            let kind = input.parse::<SymbolKind>()?;
+            let SpannedSymbolKind { tokens: tt, kind } = input.parse::<SpannedSymbolKind>()?;
+            tokens.extend(tt);
             Ok(Self {
                 binding: None,
                 kind,
