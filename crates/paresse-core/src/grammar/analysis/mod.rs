@@ -1,4 +1,4 @@
-mod action_table;
+mod lr1_action_table;
 mod augmented_first_sets;
 mod first_sets;
 mod follow_sets;
@@ -6,7 +6,7 @@ mod lr_items;
 mod non_terminals;
 mod terminals;
 
-pub use action_table::{ActionTableError, LR1ActionTable};
+pub use lr1_action_table::{ActionTableError, LR1ActionTable};
 pub use augmented_first_sets::AugmentedFirstSets;
 pub use first_sets::FirstSets;
 pub use follow_sets::FollowSets;
