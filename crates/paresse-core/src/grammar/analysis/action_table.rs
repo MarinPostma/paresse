@@ -65,13 +65,21 @@ impl LR1ActionTable {
         if Self::is_shift_reduce(prev, &new) {
             Self::handle_shit_reduce(g, prev, new, lookahead)
         } else if Self::is_reduce_reduce(prev, &new) {
-            Err(ActionTableError::UnhandledReduceReduce {
-                rule1: prev.item.rule_id(),
-                rule2: new.item.rule_id(),
-            })
+            Self::handle_reduce_reduce(g, prev, new)
         } else {
             Ok(())
         }
+    }
+
+    fn handle_reduce_reduce(
+        g: &Grammar,
+        prev: &mut ActionTableSlot,
+        new: ActionTableSlot,
+    ) -> Result<(), ActionTableError> {
+        Err(ActionTableError::UnhandledReduceReduce {
+            rule1: prev.item.rule_id(),
+            rule2: new.item.rule_id(),
+        })
     }
 
     fn handle_shit_reduce(
