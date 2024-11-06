@@ -9,9 +9,11 @@ pub struct Config {
 /// The the type of parser to generate
 #[derive(Debug, Default)]
 pub enum ParserFlavor {
-    // A direct-coded ll(1) parser
+    /// A direct-coded ll(1) parser
     #[default]
     Ll1,
-    // A direct-coded lr(1) parser
+    /// A direct-coded lr(1) parser
     Lr1,
+    /// A dummy lr(1) parser, for dev purposes
+    DummyLr1,
 }

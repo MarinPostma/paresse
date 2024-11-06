@@ -1,4 +1,5 @@
 use paresse_core::grammar::ActionTableError;
+use quote::format_ident;
 use quote::ToTokens;
 use quote::quote;
 
@@ -33,9 +34,7 @@ impl<'g> DummyLR1Generator<'g> {
             .collect::<syn::Result<Vec<_>>>()?;
 
         Ok(quote! {
-            fn __rules__() {
-                #(#rules)*
-            }
+            #(#rules)*
         })
     }
 
@@ -66,29 +65,44 @@ impl<'g> DummyLR1Generator<'g> {
             },
         };
 
-        let handlers = actions.filter_map(|(_, a)| {
-            let rule = match a {
+        let handlers = actions.filter_map(|(l, a)| {
+            let rule_id = match a {
                 paresse_core::grammar::Action::Reduce { rule, .. } => rule,
                 paresse_core::grammar::Action::Accept { rule } => rule,
                 _ => return None,
             };
-            let rule = self.grammar.rule(rule);
+            let rule = self.grammar.rule(rule_id);
             let bindings = rule
                 .rhs()
                 .iter()
-                .filter_map(|r| r.binding.as_ref())
-                .map(|b| {
-                    let n = b.name();
-                    quote! { let #n = todo!(); }
+                .filter(|r| r.binding.is_some())
+                .map(|r| {
+                    let n = r.binding.as_ref().unwrap().name();
+                    let ty = match r.sym.ty() {
+                        Some(ty) => quote! { #ty },
+                        None => quote! { &str },
+
+                    };
+
+                    let mutable = if r.binding.as_ref().unwrap().is_mutable() {
+                        quote! { mut }
+                    } else {
+                        quote! {}
+                    };
+
+                    quote! { let #mutable #n: #ty = __make_value(); }
                 });
             let handler = match rule.handler {
-                None => quote! {},
+                None => quote! { std::default::Default::default() },
                 Some(ref e) => {
                     quote! { #e }
                 }
             };
+
+            let fn_name = format_ident!("__handler_{rule_id}_{cci}_{}", l.as_u32());
+            let ret_ty = &rule.lhs().name;
             Some(quote! {
-                {
+                fn #fn_name() -> #ret_ty {
                     #(#bindings)*
                     #handler
                 }
@@ -109,12 +123,16 @@ impl<'g> DummyLR1Generator<'g> {
         let rules = self.gen_rules()?;
 
         Ok(quote::quote! {
-            pub struct Parser<'input> { }
+            pub struct Parser<'input> { p: std::marker::PhantomData<&'input ()> }
 
             impl<'input> Parser<'input> {
                 pub fn parse(s: &'input str) -> #goal_ty {
-                    unimplement!("this is a dummy parser, generate a LR1 parser instead")
+                    unimplemented!("this is a dummy parser, generate a LR1 parser instead")
                 }
+            }
+
+            fn __make_value<A>() -> A {
+                unreachable!()
             }
 
             #rules

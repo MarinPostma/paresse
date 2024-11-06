@@ -9,6 +9,7 @@ use syn::token::Brace;
 use syn::{braced, Attribute, Expr, ExprLit, Ident, Lit, LitStr, MetaNameValue, Token};
 
 use crate::config::{Config, ParserFlavor};
+use crate::generate::parsers::dummy_lr1;
 
 #[derive(Clone, Debug)]
 pub enum TerminalKind {
@@ -513,12 +514,13 @@ fn parse_config(input: syn::parse::ParseStream, config: &mut Config) -> syn::Res
                 match entry.path.to_token_stream().to_string().as_str() {
                     "parser_flavor" => match entry.value {
                         Expr::Path(p)
-                            if ["ll1", "lr1"]
+                            if ["ll1", "lr1", "dummy_lr1"]
                                 .contains(&p.to_token_stream().to_string().as_str()) =>
                         {
-                            match p.to_token_stream().to_string().as_str() {
+                            match dbg!(p.to_token_stream().to_string().as_str()) {
                                 "ll1" => config.parser_flavor = ParserFlavor::Ll1,
                                 "lr1" => config.parser_flavor = ParserFlavor::Lr1,
+                                "dummy_lr1" => config.parser_flavor = ParserFlavor::DummyLr1,
                                 _ => unreachable!(),
                             }
                         }

@@ -25,6 +25,12 @@ pub enum Symbol {
 }
 
 impl Symbol {
+    pub fn ty(&self) -> Option<&Ident> {
+        match self {
+            Symbol::Terminal(_) => None,
+            Symbol::NonTerminal(nt) => Some(&nt.name),
+        }
+    }
     fn symbol_id(&self) -> SymbolId {
         match self {
             Symbol::Terminal(t) => t.sym_id,

@@ -41,6 +41,7 @@ fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
     let parser: &dyn ToTokens = match ast.config().parser_flavor {
         config::ParserFlavor::Ll1 => &generate::parsers::ll1::LL1Generator::new(&grammar)?,
         config::ParserFlavor::Lr1 => &generate::parsers::lr1::LR1Generator::new(&grammar)?,
+        config::ParserFlavor::DummyLr1 => &generate::parsers::dummy_lr1::DummyLR1Generator::new(&grammar)?,
     };
 
     println!("generated grammar in {:?}", before.elapsed());
