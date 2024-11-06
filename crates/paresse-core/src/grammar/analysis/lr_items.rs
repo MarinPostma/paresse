@@ -6,13 +6,18 @@ use crate::{
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-pub struct LrItem {
+struct Kernel {
     /// rule id in the grammar
     rule: usize,
     /// position of the placeholder in the rule, iow, the current position in rule.rhs in a derivation of
     /// rule.lhs.
     /// rule.rhs[placeholder] points to the symbol immediately right of the placeholder
     placeholder: usize,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+pub struct LrItem {
+    kernel: Kernel,
     /// Lookahead symbol for this item.
     lookahead: Symbol,
 }
@@ -20,26 +25,33 @@ pub struct LrItem {
 impl LrItem {
     pub fn new(rule: usize, placeholder: usize, lookahead: Symbol) -> Self {
         Self {
-            rule,
-            placeholder,
+            kernel: Kernel {
+                rule,
+                placeholder,
+            },
             lookahead,
         }
     }
+
+    fn kernel(&self) -> &Kernel {
+        &self.kernel
+    }
+
     /// Returns the symbol immediately to the right of this item's placeholder. If None is
     /// returned, then the placeholder is past the end of the production
-    pub fn placeholder_right(&self, grammar: &Grammar) -> Option<Symbol> {
-        let rule = &grammar.rules()[self.rule];
-        debug_assert!(self.placeholder <= rule.rhs().len());
-        rule.rhs().get(self.placeholder).copied()
+    pub fn placeholder_right(&self, g: &Grammar) -> Option<Symbol> {
+        let rule = self.rule(g);
+        debug_assert!(self.kernel.placeholder <= rule.rhs().len());
+        rule.rhs().get(self.placeholder()).copied()
     }
 
     /// compute first(da), for the item's rule in the form [A -> B.Cd, a]
     pub fn first_detla(&self, grammar: &Grammar) -> SymbolSet {
-        let c = grammar.rules()[self.rule]
+        let c = grammar.rules()[self.rule_id()]
             .rhs()
             .iter()
             .copied()
-            .skip(self.placeholder + 1)
+            .skip(self.placeholder() + 1)
             .chain(std::iter::once(self.lookahead));
         grammar.first_sets().first_concat(c)
     }
@@ -47,17 +59,20 @@ impl LrItem {
     /// returns a new LrItem with the placeholder advanced by one symbol
     pub fn advance(&self) -> Self {
         Self {
-            placeholder: self.placeholder + 1,
+            kernel: Kernel {
+                placeholder: self.placeholder() + 1,
+                ..self.kernel
+            },
             ..*self
         }
     }
 
     pub fn rule_id(&self) -> usize {
-        self.rule
+        self.kernel.rule
     }
 
     pub fn rule<'a>(&self, g: &'a Grammar) -> &'a Rule {
-        &g.rules()[self.rule]
+        &g.rules()[self.rule_id()]
     }
 
     pub fn action(&self, g: &Grammar, from: u32) -> Action {
@@ -67,7 +82,7 @@ impl LrItem {
                 let follow = g.follow_sets().follow(self.rule(g).lhs());
                 if follow.contains(self.lookahead) {
                     return Action::Reduce {
-                        rule: self.rule,
+                        rule: self.rule_id(),
                         symbol: self.lookahead,
                     };
                 } else if let Some(to) = cc.transition(from, s) {
@@ -86,10 +101,10 @@ impl LrItem {
             }
             Action::Error
         } else if self.lookahead == Symbol::eof() && self.rule(g).lhs() == g.goal() {
-            Action::Accept { rule: self.rule }
+            Action::Accept { rule: self.rule_id() }
         } else {
             Action::Reduce {
-                rule: self.rule,
+                rule: self.rule_id(),
                 symbol: self.lookahead,
             }
         }
@@ -100,7 +115,7 @@ impl LrItem {
     }
 
     pub fn placeholder(&self) -> usize {
-        self.placeholder
+        self.kernel.placeholder
     }
 }
 
