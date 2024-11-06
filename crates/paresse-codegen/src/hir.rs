@@ -384,6 +384,10 @@ impl GrammarHir {
         &self.grammar
     }
 
+    pub fn rule(&self, rule: usize) -> &Rule {
+        &self.rules()[rule]
+    }
+
     pub fn rules(&self) -> &[Rule] {
         &self.rules
     }
