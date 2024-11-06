@@ -287,6 +287,7 @@ impl GrammarAst {
 pub struct RuleAttr {
     pub assoc: Assoc,
     pub prec: Option<usize>,
+    pub priority: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -337,6 +338,8 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
 
             let mut prec: Option<usize> = None;
             let mut assoc = Assoc::Left;
+            let mut priority: Option<usize> = None;
+
             for entry in entries {
                 let name = entry.path.to_token_stream().to_string();
                 match name.as_str() {
@@ -368,6 +371,19 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
                         }
                         _ => todo!(),
                     },
+                    "priority" => match entry.value {
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Int(i), ..
+                        }) => {
+                            priority = Some(i.base10_parse().unwrap());
+                        }
+                        _ => {
+                            return Err(syn::Error::new_spanned(
+                                &entry.value,
+                                format_args!("priority must be a literal integer"),
+                            ))
+                        }
+                    },
                     _ => {
                         return Err(syn::Error::new_spanned(
                             &entry.value,
@@ -379,7 +395,8 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
                     }
                 }
             }
-            Ok(RuleAttrs::Rule(RuleAttr { prec, assoc }))
+
+            Ok(RuleAttrs::Rule(RuleAttr { prec, assoc, priority }))
         }
         syn::Meta::List(l)
             if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "token" =>
