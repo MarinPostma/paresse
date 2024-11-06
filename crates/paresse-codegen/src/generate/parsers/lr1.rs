@@ -1,6 +1,6 @@
 use paresse_core::grammar::{ActionTableError, Symbol as SymbolId};
 use paresse_core::grammar::{Action, CanonicalCollections};
-use quote::{quote, ToTokens};
+use quote::{format_ident, quote, ToTokens};
 
 use crate::hir::{self, GrammarHir, Rule, Symbol};
 
@@ -188,7 +188,7 @@ struct GenAccept<'a> {
 impl ToTokens for GenAccept<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let from = self.from;
-        let reduce = gen_reduce(self.rule);
+        let reduce = gen_reduce(self.rule, quote! { self });
 
         quote! {
             (#from, None) => {
@@ -227,17 +227,28 @@ impl GenReduce<'_> {
                 #(#transitions,)*
                 invalid => unreachable!("invalid transition {invalid}, {t:?}"),
             };
-            self.stack.push(StackItem::State(next));
+            parser.stack.push(StackItem::State(next));
         }
     }
 
     fn gen_reduce(&self) -> impl ToTokens {
         let reduce_type = &self.rule.lhs().name;
-        let reduced = gen_reduce(self.rule);
+        let reduced = gen_reduce(self.rule, quote! { parser });
+        let reduce_fn_name = format_ident!("reduce_{reduce_type}_{}", self.from);
+        let state_trans = self.gen_next_state_transition();
+        // FIXME: just  a hack to reduce stack size, make cleaner
+        let reduce_fn = quote! {
+            fn #reduce_fn_name(parser: &mut Parser, t: Option<u16>) {
+                let out = #reduced;
+                let state = parser.state();
+                parser.stack.push(StackItem::Node(NonTerminals::#reduce_type(out)));
+                #state_trans
+            }
+        };
+        
         quote! {
-            let out = #reduced;
-            let state = self.state();
-            self.stack.push(StackItem::Node(NonTerminals::#reduce_type(out)));
+            #reduce_fn
+            #reduce_fn_name(self, t);
         }
     }
 }
@@ -245,7 +256,6 @@ impl GenReduce<'_> {
 impl ToTokens for GenReduce<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let match_token = self.gen_match_token();
-        let state_trans = self.gen_next_state_transition();
         let reduce = self.gen_reduce();
         let cci = self.from;
 
@@ -253,7 +263,6 @@ impl ToTokens for GenReduce<'_> {
             (#cci, t@#match_token) => {
                 // reduce
                 #reduce
-                #state_trans
             }
         }
         .to_tokens(tokens)
@@ -283,7 +292,7 @@ impl ToTokens for GenShift {
     }
 }
 
-fn gen_reduce(rule: &Rule) -> impl ToTokens {
+fn gen_reduce(rule: &Rule, target: impl ToTokens) -> impl ToTokens {
     let bindings = rule.rhs().iter().rev().map(|s| {
         // the stack is layed out in that way: state, sym, state, sym...
         let binding = match &s.binding {
@@ -311,10 +320,10 @@ fn gen_reduce(rule: &Rule) -> impl ToTokens {
             Symbol::Terminal(_) => {
                 quote! {
                     {
-                        self.stack.pop();
-                        match self.stack.pop() {
+                        #target.stack.pop();
+                        match #target.stack.pop() {
                             Some(StackItem::Token(t)) => {
-                                self.tokens.lexeme(&t.span)
+                                #target.tokens.lexeme(&t.span)
                             }
                             _ => unreachable!(),
                         }
@@ -325,8 +334,8 @@ fn gen_reduce(rule: &Rule) -> impl ToTokens {
                 let id = &nt.name;
                 quote! {
                     {
-                        self.stack.pop();
-                        match self.stack.pop() {
+                        #target.stack.pop();
+                        match #target.stack.pop() {
                             Some(StackItem::Node(NonTerminals::#id(i))) => i,
                             _ => unreachable!(),
                         }
