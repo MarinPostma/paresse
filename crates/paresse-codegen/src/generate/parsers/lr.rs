@@ -1,14 +1,20 @@
-use paresse_core::grammar::{Action, CanonicalCollections};
+use std::marker::PhantomData;
+
+use paresse_core::grammar::{Action, ActionTable, CanonicalCollections, GenAlg};
 use paresse_core::grammar::{ActionTableError, Symbol as SymbolId};
 use quote::{format_ident, quote, ToTokens};
 
 use crate::hir::{self, GrammarHir, Rule, Symbol};
 
-pub struct LR1Generator<'g> {
+/// Generate a direct-coded parsed of the LR family. The parser generated depends on the Gen type
+/// parameter.
+pub struct LRGenerator<'g, Gen> {
     grammar: &'g GrammarHir,
+    action_table: ActionTable,
+    _p: PhantomData<Gen>,
 }
 
-impl<'g> ToTokens for LR1Generator<'g> {
+impl<'g, Gen: GenAlg> ToTokens for LRGenerator<'g, Gen> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self.generate() {
             Ok(tt) => tt.to_tokens(tokens),
@@ -17,9 +23,47 @@ impl<'g> ToTokens for LR1Generator<'g> {
     }
 }
 
-impl<'g> LR1Generator<'g> {
+impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
     pub fn new(grammar: &'g GrammarHir) -> syn::Result<Self> {
-        Ok(Self { grammar })
+        let action_table = match grammar.grammar().action_table::<Gen>() {
+            Ok(t) => t,
+            Err(ActionTableError::UnhandledShiftReduce { rule1, rule2 }) => {
+                let rule1 = &grammar.rules()[rule1];
+                let rule2 = &grammar.rules()[rule2];
+                let mut tokens = Default::default();
+                rule1.rhs_tokens(&mut tokens);
+                let mut tokens2 = Default::default();
+                rule2.rhs_tokens(&mut tokens2);
+                return Err(syn::Error::new_spanned(
+                    &tokens,
+                    format_args!(
+                        "shift/reduce conflict between:\n\t- {}\n\t- {}",
+                        tokens, tokens2
+                    ),
+                ));
+            }
+            Err(ActionTableError::UnhandledReduceReduce { rule2, rule1 }) => {
+                let rule1 = &grammar.rules()[rule1];
+                let rule2 = &grammar.rules()[rule2];
+                let mut tokens = Default::default();
+                rule1.rhs_tokens(&mut tokens);
+                let mut tokens2 = Default::default();
+                rule2.rhs_tokens(&mut tokens2);
+                return Err(syn::Error::new_spanned(
+                    &tokens,
+                    format_args!(
+                        "reduce/reduce conflict between:\n\t- {}\n\t- {}",
+                        tokens, tokens2
+                    ),
+                ));
+            }
+        };
+
+        Ok(Self {
+            grammar,
+            action_table,
+            _p: PhantomData,
+        })
     }
 
     pub fn generate(&self) -> syn::Result<impl ToTokens> {
@@ -97,45 +141,14 @@ impl<'g> LR1Generator<'g> {
     }
 
     fn gen_rule(&self, cci: u32) -> syn::Result<impl ToTokens> {
-        let actions = match self.grammar.grammar().lr1_action_table() {
-            Ok(t) => t.actions(cci),
-            Err(ActionTableError::UnhandledShiftReduce { rule1, rule2 }) => {
-                let rule1 = &self.grammar.rules()[rule1];
-                let rule2 = &self.grammar.rules()[rule2];
-                let mut tokens = Default::default();
-                rule1.rhs_tokens(&mut tokens);
-                let mut tokens2 = Default::default();
-                rule2.rhs_tokens(&mut tokens2);
-                return Err(syn::Error::new_spanned(
-                    &tokens,
-                    format_args!(
-                        "shift/reduce conflict between:\n\t- {}\n\t- {}",
-                        tokens, tokens2
-                    ),
-                ));
-            }
-            Err(ActionTableError::UnhandledReduceReduce { rule2, rule1 }) => {
-                let rule1 = &self.grammar.rules()[rule1];
-                let rule2 = &self.grammar.rules()[rule2];
-                let mut tokens = Default::default();
-                rule1.rhs_tokens(&mut tokens);
-                let mut tokens2 = Default::default();
-                rule2.rhs_tokens(&mut tokens2);
-                return Err(syn::Error::new_spanned(
-                    &tokens,
-                    format_args!(
-                        "reduce/reduce conflict between:\n\t- {}\n\t- {}",
-                        tokens, tokens2
-                    ),
-                ));
-            }
-        };
-
-        let t_rules = actions.into_iter().map(|(_s, action)| GenAction {
-            from: cci,
-            action,
-            grammar: self.grammar,
-        });
+        let t_rules = self
+            .action_table
+            .actions(cci)
+            .map(|(_s, action)| GenAction {
+                from: cci,
+                action,
+                grammar: self.grammar,
+            });
 
         Ok(quote! {
             #(#t_rules)*

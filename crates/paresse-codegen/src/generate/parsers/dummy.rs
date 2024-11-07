@@ -1,4 +1,6 @@
+use paresse_core::grammar::ActionTable;
 use paresse_core::grammar::ActionTableError;
+use paresse_core::grammar::GenAlg;
 use quote::format_ident;
 use quote::quote;
 use quote::ToTokens;
@@ -11,11 +13,13 @@ use crate::hir::GrammarHir;
 /// developpement as it compiles fast. It allows the LSP to keep up, for example, so one can
 /// iterate quickly on writing rules. When you actually need to generate the parser, switch to an
 /// actual parser instead.
-pub struct DummyLR1Generator<'g> {
+pub struct DummyGenerator<'g, Gen> {
     grammar: &'g GrammarHir,
+    action_table: ActionTable,
+    _p: std::marker::PhantomData<Gen>,
 }
 
-impl<'g> ToTokens for DummyLR1Generator<'g> {
+impl<'g, Gen: GenAlg> ToTokens for DummyGenerator<'g, Gen> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self.generate() {
             Ok(tt) => tt.to_tokens(tokens),
@@ -24,27 +28,13 @@ impl<'g> ToTokens for DummyLR1Generator<'g> {
     }
 }
 
-impl<'g> DummyLR1Generator<'g> {
+impl<'g, Gen: GenAlg> DummyGenerator<'g, Gen> {
     pub fn new(grammar: &'g GrammarHir) -> syn::Result<Self> {
-        Ok(Self { grammar })
-    }
-
-    fn gen_rules(&self, generated_fns: &mut Vec<Ident>) -> syn::Result<impl ToTokens> {
-        let rules = (0..self.grammar.grammar().canonical_collection().len())
-            .map(|i| self.gen_rule(i as u32, generated_fns))
-            .collect::<syn::Result<Vec<_>>>()?;
-
-        Ok(quote! {
-            #(#rules)*
-        })
-    }
-
-    fn gen_rule(&self, cci: u32, generated_fns: &mut Vec<Ident>) -> syn::Result<impl ToTokens> {
-        let actions = match self.grammar.grammar().lr1_action_table() {
-            Ok(t) => t.actions(cci),
+        let action_table = match grammar.grammar().action_table::<Gen>() {
+            Ok(t) => t,
             Err(ActionTableError::UnhandledShiftReduce { rule1, rule2 }) => {
-                let rule1 = &self.grammar.rules()[rule1];
-                let rule2 = &self.grammar.rules()[rule2];
+                let rule1 = &grammar.rules()[rule1];
+                let rule2 = &grammar.rules()[rule2];
                 let mut tokens = Default::default();
                 rule1.rhs_tokens(&mut tokens);
                 let mut tokens2 = Default::default();
@@ -58,8 +48,8 @@ impl<'g> DummyLR1Generator<'g> {
                 ));
             }
             Err(ActionTableError::UnhandledReduceReduce { rule2, rule1 }) => {
-                let rule1 = &self.grammar.rules()[rule1];
-                let rule2 = &self.grammar.rules()[rule2];
+                let rule1 = &grammar.rules()[rule1];
+                let rule2 = &grammar.rules()[rule2];
                 let mut tokens = Default::default();
                 rule1.rhs_tokens(&mut tokens);
                 let mut tokens2 = Default::default();
@@ -74,7 +64,21 @@ impl<'g> DummyLR1Generator<'g> {
             }
         };
 
-        let handlers = actions.filter_map(|(l, a)| {
+        Ok(Self { grammar, action_table, _p: std::marker::PhantomData })
+    }
+
+    fn gen_rules(&self, generated_fns: &mut Vec<Ident>) -> syn::Result<impl ToTokens> {
+        let rules = (0..self.grammar.grammar().canonical_collection().len())
+            .map(|i| self.gen_rule(i as u32, generated_fns))
+            .collect::<syn::Result<Vec<_>>>()?;
+
+        Ok(quote! {
+            #(#rules)*
+        })
+    }
+
+    fn gen_rule(&self, cci: u32, generated_fns: &mut Vec<Ident>) -> syn::Result<impl ToTokens> {
+        let handlers = self.action_table.actions(cci).filter_map(|(l, a)| {
             let rule_id = match a {
                 paresse_core::grammar::Action::Reduce { rule, .. } => rule,
                 paresse_core::grammar::Action::Accept { rule } => rule,

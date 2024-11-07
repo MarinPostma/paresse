@@ -1,4 +1,3 @@
-pub mod dummy_lr1;
+pub mod dummy;
 pub mod ll1;
-pub mod lr1;
-pub mod lalr1;
+pub mod lr;

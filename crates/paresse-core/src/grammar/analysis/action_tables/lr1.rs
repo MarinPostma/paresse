@@ -2,20 +2,13 @@ use std::collections::{hash_map::Entry, HashMap};
 
 use crate::grammar::{Action, Grammar, Symbol};
 
-use super::{ conflict::resolve_conflict, ActionTableError, ActionTableSlot };
+use super::{ActionTable, ActionTableError, ActionTableSlot, GenAlg};
+use super::conflict::resolve_conflict;
 
-pub struct LR1ActionTable {
-    actions: Vec<HashMap<Symbol, ActionTableSlot>>,
-}
+pub enum Lr1 {}
 
-
-impl LR1ActionTable {
-    pub fn num_states(&self) -> usize {
-        self.actions.iter().map(|a| a.len()).sum()
-    }
-
-    /// Fixme: handle error in table construction
-    pub fn compute(g: &Grammar) -> Result<Self, ActionTableError> {
+impl GenAlg for Lr1 {
+    fn compute(g: &Grammar) -> Result<ActionTable, ActionTableError> {
         let cc = g.canonical_collection();
         let mut actions: Vec<HashMap<Symbol, ActionTableSlot>> =
             std::iter::repeat_with(HashMap::new)
@@ -45,12 +38,6 @@ impl LR1ActionTable {
             }
         }
 
-        Ok(Self { actions })
-    }
-
-    pub fn actions(&self, from: u32) -> impl Iterator<Item = (Symbol, Action)> + '_ {
-        self.actions[from as usize]
-            .iter()
-            .map(|(a, b)| (*a, b.action))
+        Ok(ActionTable { actions })
     }
 }

@@ -43,8 +43,6 @@ pub struct Grammar {
     non_terminals: NonTerminals,
     augmented_first_sets: OnceCell<AugmentedFirstSets>,
     canonical_collection: OnceCell<CanonicalCollections>,
-    lr1_action_table: OnceCell<Result<LR1ActionTable, ActionTableError>>,
-    lalr1_action_table: OnceCell<Result<Lalr1ActionTable, ActionTableError>>,
 }
 
 impl Grammar {
@@ -143,18 +141,8 @@ impl Grammar {
             .get_or_init(|| CanonicalCollections::compute(self))
     }
 
-    pub fn lr1_action_table(&self) -> Result<&LR1ActionTable, ActionTableError> {
-        self.lr1_action_table
-            .get_or_init(|| LR1ActionTable::compute(self))
-            .as_ref()
-            .map_err(|e| *e)
-    }
-
-    pub fn lalr1_action_table(&self) -> Result<&Lalr1ActionTable, ActionTableError> {
-        self.lalr1_action_table
-            .get_or_init(|| Lalr1ActionTable::compute(self))
-            .as_ref()
-            .map_err(|e| *e)
+    pub fn action_table<C: GenAlg>(&self) -> Result<ActionTable, ActionTableError> {
+        ActionTable::compute::<C>(self)
     }
 
     pub fn sym_assoc(&self, s: Symbol) -> Option<Assoc> {
@@ -296,8 +284,6 @@ impl Builder {
             first_sets: OnceCell::new(),
             augmented_first_sets: OnceCell::new(),
             canonical_collection: OnceCell::new(),
-            lr1_action_table: OnceCell::new(),
-            lalr1_action_table: OnceCell::new(),
         }
     }
 }

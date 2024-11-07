@@ -6,6 +6,7 @@ use crate::hir::GrammarHir;
 
 pub struct Lalr1Generator<'g> {
     grammar: &'g GrammarHir,
+    action
 }
 
 impl<'g> ToTokens for Lalr1Generator<'g> {

@@ -2,18 +2,15 @@ use std::collections::{hash_map::Entry, BTreeSet, HashMap};
 
 use crate::grammar::{analysis::action_tables::conflict::resolve_conflict, Action, Grammar, Symbol};
 
-use super::{ActionTableError, ActionTableSlot};
+use super::{ActionTable, ActionTableError, ActionTableSlot, GenAlg};
 
-#[derive(Debug)]
-pub struct Lalr1ActionTable {
-    actions: Vec<HashMap<Symbol, ActionTableSlot>>,
-}
+pub enum Lalr1 {}
 
-impl Lalr1ActionTable {
+impl GenAlg for Lalr1 {
     // FIXME: we're being lazy here and bulding the LALR action table the brute-force way, which
     // involves first building the canonnical collections and then merging kernels, but we could
     // merge duplicates as we create the canonical collection
-    pub fn compute(g: &Grammar) -> Result<Self, ActionTableError> {
+    fn compute(g: &Grammar) -> Result<ActionTable, ActionTableError> {
         let cc = g.canonical_collection();
         let mut merged: HashMap<_, u32> = HashMap::new();
         let mut map_states= HashMap::new();
@@ -70,7 +67,7 @@ impl Lalr1ActionTable {
             }
         }
 
-        Ok(Self { actions })
+        Ok(ActionTable { actions })
     }
 }
 
@@ -91,7 +88,7 @@ mod test {
 
         let g = builder.build(Some(goal));
 
-        let _ = g.lalr1_action_table();
+        let _ = g.action_table::<Lalr1>();
     }
     
     #[test]
@@ -110,6 +107,6 @@ mod test {
 
         let g = builder.build(Some(goal));
 
-        dbg!(g.lalr1_action_table());
+        assert!(g.action_table::<Lalr1>().is_ok());
     }
 }

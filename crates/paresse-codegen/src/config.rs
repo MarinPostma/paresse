@@ -4,6 +4,8 @@ use syn::Ident;
 pub struct Config {
     pub parser_flavor: ParserFlavor,
     pub goal: Option<Ident>,
+    /// Whether to generator a dummy parser
+    pub dummy: bool,
 }
 
 /// The the type of parser to generate
@@ -14,7 +16,5 @@ pub enum ParserFlavor {
     Ll1,
     /// A direct-coded lr(1) parser
     Lr1,
-    /// A dummy lr(1) parser, for dev purposes
-    DummyLr1,
     Lalr1,
 }

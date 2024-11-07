@@ -1,4 +1,5 @@
 use config::ParserFlavor;
+use paresse_core::grammar::{Lalr1, Lr1};
 use parse::GrammarAst;
 use proc_macro::TokenStream;
 use quote::ToTokens;
@@ -37,28 +38,28 @@ pub fn grammar(input: TokenStream) -> TokenStream {
 fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
     let before = std::time::Instant::now();
     let grammar = crate::hir::GrammarBuilder::new(&ast).build()?;
-    let lexer: &dyn ToTokens = match ast.config().parser_flavor {
+    let lexer: &dyn ToTokens = if ast.config().dummy {
         // skip generating a lexer for dummy parsers
-        ParserFlavor::DummyLr1 => &quote::quote! {},
-        _ => &generate::lexer::LexerGenerator::new(&grammar),
+        &quote::quote! {}
+    } else {
+        &generate::lexer::LexerGenerator::new(&grammar)
     };
+    let is_dummy = ast.config().dummy;
 
     let parser: &dyn ToTokens = match ast.config().parser_flavor {
+        ParserFlavor::Ll1 if is_dummy => panic!("dummy ll1 parser are not supported"),
         ParserFlavor::Ll1 => &generate::parsers::ll1::LL1Generator::new(&grammar)?,
+        ParserFlavor::Lr1 if is_dummy => {
+            &generate::parsers::dummy::DummyGenerator::<Lr1>::new(&grammar)?
+        }
         ParserFlavor::Lr1 => {
-            if let Ok(t) = grammar.grammar().lr1_action_table() {
-                println!("generating {} states", t.num_states());
-            }
-            &generate::parsers::lr1::LR1Generator::new(&grammar)?
+            &generate::parsers::lr::LRGenerator::<Lr1>::new(&grammar)?
         }
-        ParserFlavor::DummyLr1 => {
-            if let Ok(t) = grammar.grammar().lr1_action_table() {
-                println!("generating {} states", t.num_states());
-            }
-            &generate::parsers::dummy_lr1::DummyLR1Generator::new(&grammar)?
-        }
+        ParserFlavor::Lalr1 if is_dummy => {
+            &generate::parsers::dummy::DummyGenerator::<Lalr1>::new(&grammar)?
+        },
         ParserFlavor::Lalr1 => {
-            &generate::parsers::lalr1::Lalr1Generator::new(&grammar)?
+            &generate::parsers::lr::LRGenerator::<Lalr1>::new(&grammar)?
         },
     };
 

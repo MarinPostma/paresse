@@ -517,13 +517,12 @@ fn parse_config(input: syn::parse::ParseStream, config: &mut Config) -> syn::Res
                 match entry.path.to_token_stream().to_string().as_str() {
                     "parser_flavor" => match entry.value {
                         Expr::Path(p)
-                            if ["ll1", "lr1", "dummy_lr1", "lalr1"]
+                            if ["ll1", "lr1", "lalr1"]
                                 .contains(&p.to_token_stream().to_string().as_str()) =>
                         {
                             match p.to_token_stream().to_string().as_str() {
                                 "ll1" => config.parser_flavor = ParserFlavor::Ll1,
                                 "lr1" => config.parser_flavor = ParserFlavor::Lr1,
-                                "dummy_lr1" => config.parser_flavor = ParserFlavor::DummyLr1,
                                 "lalr1" => config.parser_flavor = ParserFlavor::Lalr1,
                                 _ => unreachable!(),
                             }
@@ -544,6 +543,19 @@ fn parse_config(input: syn::parse::ParseStream, config: &mut Config) -> syn::Res
                                 &entry.value,
                                 format_args!(
                                     "goal must be the type name for a rule of the grammar"
+                                ),
+                            ))
+                        }
+                    },
+                    "dummy" => match entry.value {
+                        Expr::Lit(ExprLit{ lit: Lit::Bool(b), .. }) => {
+                            config.dummy = b.value();
+                        }
+                        _ => {
+                            return Err(syn::Error::new_spanned(
+                                &entry.value,
+                                format_args!(
+                                    "dymmy must be a boolean literal"
                                 ),
                             ))
                         }
