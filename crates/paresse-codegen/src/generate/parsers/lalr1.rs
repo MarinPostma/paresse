@@ -1,8 +1,8 @@
+#![allow(dead_code)]
 use quote::ToTokens;
 use quote::quote;
 
 use crate::hir::GrammarHir;
-
 
 pub struct Lalr1Generator<'g> {
     grammar: &'g GrammarHir,
@@ -19,6 +19,7 @@ impl<'g> ToTokens for Lalr1Generator<'g> {
 
 impl<'g> Lalr1Generator<'g> {
     pub fn new(grammar: &'g GrammarHir) -> syn::Result<Self> {
+        let _ = grammar.grammar().lalr1_action_table();
         Ok(Self { grammar })
     }
 

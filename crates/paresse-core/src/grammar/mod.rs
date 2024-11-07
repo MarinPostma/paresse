@@ -44,6 +44,7 @@ pub struct Grammar {
     augmented_first_sets: OnceCell<AugmentedFirstSets>,
     canonical_collection: OnceCell<CanonicalCollections>,
     lr1_action_table: OnceCell<Result<LR1ActionTable, ActionTableError>>,
+    lalr1_action_table: OnceCell<Result<Lalr1ActionTable, ActionTableError>>,
 }
 
 impl Grammar {
@@ -145,6 +146,13 @@ impl Grammar {
     pub fn lr1_action_table(&self) -> Result<&LR1ActionTable, ActionTableError> {
         self.lr1_action_table
             .get_or_init(|| LR1ActionTable::compute(self))
+            .as_ref()
+            .map_err(|e| *e)
+    }
+
+    pub fn lalr1_action_table(&self) -> Result<&Lalr1ActionTable, ActionTableError> {
+        self.lalr1_action_table
+            .get_or_init(|| Lalr1ActionTable::compute(self))
             .as_ref()
             .map_err(|e| *e)
     }
@@ -289,6 +297,7 @@ impl Builder {
             augmented_first_sets: OnceCell::new(),
             canonical_collection: OnceCell::new(),
             lr1_action_table: OnceCell::new(),
+            lalr1_action_table: OnceCell::new(),
         }
     }
 }

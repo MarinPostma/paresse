@@ -2,6 +2,7 @@ use paresse_core::grammar::ActionTableError;
 use quote::format_ident;
 use quote::quote;
 use quote::ToTokens;
+use syn::Ident;
 
 use crate::hir::GrammarHir;
 
@@ -28,9 +29,9 @@ impl<'g> DummyLR1Generator<'g> {
         Ok(Self { grammar })
     }
 
-    fn gen_rules(&self) -> syn::Result<impl ToTokens> {
+    fn gen_rules(&self, generated_fns: &mut Vec<Ident>) -> syn::Result<impl ToTokens> {
         let rules = (0..self.grammar.grammar().canonical_collection().len())
-            .map(|i| self.gen_rule(i as u32))
+            .map(|i| self.gen_rule(i as u32, generated_fns))
             .collect::<syn::Result<Vec<_>>>()?;
 
         Ok(quote! {
@@ -38,7 +39,7 @@ impl<'g> DummyLR1Generator<'g> {
         })
     }
 
-    fn gen_rule(&self, cci: u32) -> syn::Result<impl ToTokens> {
+    fn gen_rule(&self, cci: u32, generated_fns: &mut Vec<Ident>) -> syn::Result<impl ToTokens> {
         let actions = match self.grammar.grammar().lr1_action_table() {
             Ok(t) => t.actions(cci),
             Err(ActionTableError::UnhandledShiftReduce { rule1, rule2 }) => {
@@ -103,9 +104,11 @@ impl<'g> DummyLR1Generator<'g> {
             };
 
             let fn_name = format_ident!("__handler_{rule_id}_{cci}_{}", l.as_u32());
+            generated_fns.push(fn_name.clone());
             let ret_ty = &rule.lhs().name;
             Some(quote! {
-                fn #fn_name() -> #ret_ty {
+                #[doc(hidden)]
+                pub fn #fn_name() -> #ret_ty {
                     #(#bindings)*
                     #handler
                 }
@@ -123,14 +126,22 @@ impl<'g> DummyLR1Generator<'g> {
             .non_terminals()
             .get_ident(self.grammar.grammar().goal())
             .unwrap();
-        let rules = self.gen_rules()?;
+        let mut generated_fns = Vec::new();
+        let rules = self.gen_rules(&mut generated_fns)?;
 
         Ok(quote::quote! {
             pub struct Parser<'input> { p: std::marker::PhantomData<&'input ()> }
 
             impl<'input> Parser<'input> {
                 pub fn parse(s: &'input str) -> #goal_ty {
-                    unimplemented!("this is a dummy parser, generate a LR1 parser instead")
+                    fn bad_parser() {
+                        unimplemented!("this is a dummy parser, generate a LR1 parser instead")
+                    }
+                    bad_parser();
+
+                    #(#generated_fns();)*
+                    
+                    __make_value()
                 }
             }
 

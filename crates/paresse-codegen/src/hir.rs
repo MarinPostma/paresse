@@ -94,6 +94,7 @@ impl Rule {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct TerminalDef {
     name: Option<Ident>,
     pat: String,
@@ -101,6 +102,7 @@ pub struct TerminalDef {
 }
 
 impl TerminalDef {
+    #[allow(dead_code)]
     pub fn name(&self) -> Option<&Ident> {
         self.name.as_ref()
     }

@@ -57,6 +57,9 @@ fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
             }
             &generate::parsers::dummy_lr1::DummyLR1Generator::new(&grammar)?
         }
+        ParserFlavor::Lalr1 => {
+            &generate::parsers::lalr1::Lalr1Generator::new(&grammar)?
+        },
     };
 
     println!("generated grammar in {:?}", before.elapsed());

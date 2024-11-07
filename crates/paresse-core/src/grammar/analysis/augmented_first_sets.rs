@@ -48,6 +48,7 @@ impl AugmentedFirstSets {
 mod test {
     use crate::grammar::Builder;
 
+    #[test]
     #[ignore = "todo"]
     fn firstp_sets() {
         let mut builder = Builder::new();
@@ -72,9 +73,7 @@ mod test {
             .is([name])
             .is([lparen, expr, rparen]);
         let grammar = builder.build(Some(expr));
-        let follow = grammar.follow_sets();
-        let first = grammar.first_sets();
-        let _first_p = grammar.augmented_first_set(&first, &follow);
+        let _first_p = grammar.augmented_first_set();
 
         panic!()
     }

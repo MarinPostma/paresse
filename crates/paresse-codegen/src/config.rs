@@ -16,4 +16,5 @@ pub enum ParserFlavor {
     Lr1,
     /// A dummy lr(1) parser, for dev purposes
     DummyLr1,
+    Lalr1,
 }

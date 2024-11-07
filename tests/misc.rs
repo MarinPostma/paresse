@@ -234,4 +234,82 @@ mod dummy {
         Expr = <n:Num> => n;
         Num = "[0-9]+";
     }
+
+    #[test]
+    #[should_panic]
+    fn parse() {
+        parser::Parser::parse("12");
+    }
 }
+
+// mod ambiguous_grammar_lalr1 {
+//     type Goal = Expr;
+//
+//     #[derive(Debug, PartialEq, Eq)]
+//     enum BinOp {
+//         Mult,
+//         Add,
+//         Div,
+//         And,
+//         Or,
+//         Minus,
+//     }
+//
+//     #[derive(Debug, PartialEq, Eq)]
+//     enum UnaryOp {
+//         Minus,
+//     }
+//
+//     #[derive(Debug, PartialEq, Eq)]
+//     enum Expr {
+//         Bin {
+//             op: BinOp,
+//             lhs: Box<Self>,
+//             rhs: Box<Self>,
+//         },
+//         Unary {
+//             op: UnaryOp,
+//             e: Box<Self>,
+//         },
+//         Num(u64),
+//     }
+//
+//     impl From<u64> for Expr {
+//         fn from(value: u64) -> Self {
+//             Self::Num(value)
+//         }
+//     }
+//
+//     paresse::grammar! {
+//         #![config(parser_flavor = lalr1)]
+//
+//         Goal = <e:Expr> => e;
+//
+//         Expr = {
+//             <lhs:Expr> ADD <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Add },
+//             <lhs:Expr> MINUS <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Minus },
+//             <lhs:Expr> MULT <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Mult },
+//             <lhs:Expr> DIV <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Div },
+//             <lhs:Expr> AND <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::And },
+//             <lhs:Expr> OR <rhs:Expr> => Expr::Bin { lhs: lhs.into(), rhs: rhs.into(), op: BinOp::Or },
+//             #[rule(prec = 4)]
+//             MINUS <e:Expr> => Expr::Unary { op: UnaryOp::Minus, e: e.into() },
+//             <n:"[0-9]+"> => Expr::Num(n.parse().unwrap()),
+//         };
+//
+//
+//         #[token(assoc = right, prec = 3)]
+//         AND = "&";
+//         #[token(assoc = right, prec = 3)]
+//         OR = "\\|";
+//         #[token(assoc = left, prec = 2)]
+//         MULT = "\\*";
+//         #[token(assoc = left, prec = 2)]
+//         DIV = "/";
+//         #[token(assoc = right, prec = 1)]
+//         ADD = "\\+";
+//         #[token(assoc = right, prec = 1)]
+//         MINUS = "-";
+//
+//     }
+// }
