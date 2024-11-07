@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use paresse_core::grammar::{Action, ActionTable, CanonicalCollections, GenAlg};
+use paresse_core::grammar::{Action, ActionTable, GenAlg};
 use paresse_core::grammar::{ActionTableError, Symbol as SymbolId};
 use quote::{format_ident, quote, ToTokens};
 
@@ -25,6 +25,7 @@ impl<'g, Gen: GenAlg> ToTokens for LRGenerator<'g, Gen> {
 
 impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
     pub fn new(grammar: &'g GrammarHir) -> syn::Result<Self> {
+        // TODO: cleanup
         let action_table = match grammar.grammar().action_table::<Gen>() {
             Ok(t) => t,
             Err(ActionTableError::UnhandledShiftReduce { rule1, rule2 }) => {
@@ -131,7 +132,7 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
     }
 
     fn gen_rules(&self) -> syn::Result<impl ToTokens> {
-        let rules = (0..self.grammar.grammar().canonical_collection().len())
+        let rules = (0..self.action_table.num_states())
             .map(|i| self.gen_rule(i as u32))
             .collect::<syn::Result<Vec<_>>>()?;
 
@@ -148,6 +149,7 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
                 from: cci,
                 action,
                 grammar: self.grammar,
+                action_table: &self.action_table,
             });
 
         Ok(quote! {
@@ -173,6 +175,7 @@ struct GenAction<'a> {
     from: u32,
     action: Action,
     grammar: &'a hir::GrammarHir,
+    action_table: &'a ActionTable,
 }
 
 impl ToTokens for GenAction<'_> {
@@ -185,9 +188,9 @@ impl ToTokens for GenAction<'_> {
             }
             .to_tokens(tokens),
             Action::Reduce { rule, symbol } => GenReduce {
-                cc: self.grammar.grammar().canonical_collection(),
                 rule: &self.grammar.rules()[rule],
                 from: self.from,
+                action_table: self.action_table,
                 symbol,
             }
             .to_tokens(tokens),
@@ -221,10 +224,10 @@ impl ToTokens for GenAccept<'_> {
 }
 
 struct GenReduce<'a> {
-    cc: &'a CanonicalCollections,
     rule: &'a Rule,
     from: u32,
     symbol: SymbolId,
+    action_table: &'a ActionTable,
 }
 
 impl GenReduce<'_> {
@@ -240,8 +243,8 @@ impl GenReduce<'_> {
     /// generate code handling the transition to the next state in a reduce operation.
     fn gen_next_state_transition(&self) -> impl ToTokens {
         let transitions = self
-            .cc
-            .transitions_for(self.rule.lhs().sym_id)
+            .action_table
+            .goto(self.rule.lhs().sym_id)
             .map(|(from, to)| quote! { #from => #to });
         quote! {
             let next = match state {

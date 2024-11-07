@@ -548,15 +548,15 @@ fn parse_config(input: syn::parse::ParseStream, config: &mut Config) -> syn::Res
                         }
                     },
                     "dummy" => match entry.value {
-                        Expr::Lit(ExprLit{ lit: Lit::Bool(b), .. }) => {
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Bool(b), ..
+                        }) => {
                             config.dummy = b.value();
                         }
                         _ => {
                             return Err(syn::Error::new_spanned(
                                 &entry.value,
-                                format_args!(
-                                    "dymmy must be a boolean literal"
-                                ),
+                                format_args!("dymmy must be a boolean literal"),
                             ))
                         }
                     },

@@ -229,7 +229,7 @@ mod dummy {
     type Num = u64;
     type Goal = u64;
     grammar! {
-        #![config(parser_flavor = dummy_lr1)]
+        #![config(parser_flavor = lr1, dummy = true)]
         Goal = Expr;
         Expr = <n:Num> => n;
         Num = "[0-9]+";

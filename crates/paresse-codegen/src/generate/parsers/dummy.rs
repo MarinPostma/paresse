@@ -64,11 +64,15 @@ impl<'g, Gen: GenAlg> DummyGenerator<'g, Gen> {
             }
         };
 
-        Ok(Self { grammar, action_table, _p: std::marker::PhantomData })
+        Ok(Self {
+            grammar,
+            action_table,
+            _p: std::marker::PhantomData,
+        })
     }
 
     fn gen_rules(&self, generated_fns: &mut Vec<Ident>) -> syn::Result<impl ToTokens> {
-        let rules = (0..self.grammar.grammar().canonical_collection().len())
+        let rules = (0..self.action_table.num_states())
             .map(|i| self.gen_rule(i as u32, generated_fns))
             .collect::<syn::Result<Vec<_>>>()?;
 
@@ -144,7 +148,7 @@ impl<'g, Gen: GenAlg> DummyGenerator<'g, Gen> {
                     bad_parser();
 
                     #(#generated_fns();)*
-                    
+
                     __make_value()
                 }
             }

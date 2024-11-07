@@ -52,15 +52,11 @@ fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
         ParserFlavor::Lr1 if is_dummy => {
             &generate::parsers::dummy::DummyGenerator::<Lr1>::new(&grammar)?
         }
-        ParserFlavor::Lr1 => {
-            &generate::parsers::lr::LRGenerator::<Lr1>::new(&grammar)?
-        }
+        ParserFlavor::Lr1 => &generate::parsers::lr::LRGenerator::<Lr1>::new(&grammar)?,
         ParserFlavor::Lalr1 if is_dummy => {
             &generate::parsers::dummy::DummyGenerator::<Lalr1>::new(&grammar)?
-        },
-        ParserFlavor::Lalr1 => {
-            &generate::parsers::lr::LRGenerator::<Lalr1>::new(&grammar)?
-        },
+        }
+        ParserFlavor::Lalr1 => &generate::parsers::lr::LRGenerator::<Lalr1>::new(&grammar)?,
     };
 
     println!("generated grammar in {:?}", before.elapsed());

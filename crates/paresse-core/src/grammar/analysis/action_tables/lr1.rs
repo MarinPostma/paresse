@@ -2,8 +2,8 @@ use std::collections::{hash_map::Entry, HashMap};
 
 use crate::grammar::{Action, Grammar, Symbol};
 
-use super::{ActionTable, ActionTableError, ActionTableSlot, GenAlg};
 use super::conflict::resolve_conflict;
+use super::{ActionTable, ActionTableError, ActionTableSlot, GenAlg};
 
 pub enum Lr1 {}
 
@@ -38,6 +38,13 @@ impl GenAlg for Lr1 {
             }
         }
 
-        Ok(ActionTable { actions })
+        let mut goto = HashMap::new();
+        for rule in g.rules() {
+            let sym = rule.lhs();
+            let trans = cc.transitions_for(sym).collect();
+            goto.insert(sym, trans);
+        }
+
+        Ok(ActionTable { actions, goto })
     }
 }

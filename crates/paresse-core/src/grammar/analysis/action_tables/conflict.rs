@@ -24,6 +24,11 @@ fn handle_reduce_reduce(
     prev: &mut ActionTableSlot,
     new: ActionTableSlot,
 ) -> Result<(), ActionTableError> {
+    // no conflict at all
+    if &new == prev {
+        return Ok(());
+    }
+
     let prev_prio = g.rule_priority(prev.item.rule_id());
     let new_prio = g.rule_priority(new.item.rule_id());
     match (prev_prio, new_prio) {
@@ -92,7 +97,7 @@ fn handle_shit_reduce(
 
 fn is_shift_reduce(lhs: &ActionTableSlot, rhs: &ActionTableSlot) -> bool {
     lhs.action.is_shift() && rhs.action.is_reduce()
-    || lhs.action.is_reduce() && rhs.action.is_shift()
+        || lhs.action.is_reduce() && rhs.action.is_shift()
 }
 
 fn resolve_assoc(g: &Grammar, prev: &mut ActionTableSlot, new: ActionTableSlot) {

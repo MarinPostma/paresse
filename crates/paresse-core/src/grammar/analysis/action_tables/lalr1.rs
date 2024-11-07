@@ -1,6 +1,8 @@
 use std::collections::{hash_map::Entry, BTreeSet, HashMap};
 
-use crate::grammar::{analysis::action_tables::conflict::resolve_conflict, Action, Grammar, Symbol};
+use crate::grammar::{
+    analysis::action_tables::conflict::resolve_conflict, Action, Grammar, Symbol,
+};
 
 use super::{ActionTable, ActionTableError, ActionTableSlot, GenAlg};
 
@@ -13,22 +15,20 @@ impl GenAlg for Lalr1 {
     fn compute(g: &Grammar) -> Result<ActionTable, ActionTableError> {
         let cc = g.canonical_collection();
         let mut merged: HashMap<_, u32> = HashMap::new();
-        let mut map_states= HashMap::new();
-        
+        let mut map_states = HashMap::new();
+
         for (i, c) in cc.collections() {
-            let kernels = c.iter()
-                .map(|i| *i.kernel())
-                .collect::<BTreeSet<_>>();
+            let kernels = c.iter().map(|i| *i.kernel()).collect::<BTreeSet<_>>();
             let next_state = merged.len() as u32;
             match merged.entry(kernels) {
                 Entry::Occupied(e) => {
                     let state = e.get();
                     map_states.insert(i, *state);
-                },
+                }
                 Entry::Vacant(e) => {
                     e.insert(next_state);
                     map_states.insert(i, next_state);
-                },
+                }
             }
         }
 
@@ -40,8 +40,9 @@ impl GenAlg for Lalr1 {
         for (cci, c) in cc.collections() {
             for item in c.iter() {
                 let action = match item.action(g, cci) {
-                    Action::Shift { state, symbol } => {
-                        Action::Shift { state: *map_states.get(&state).unwrap(), symbol }
+                    Action::Shift { state, symbol } => Action::Shift {
+                        state: *map_states.get(&state).unwrap(),
+                        symbol,
                     },
                     other => other,
                 };
@@ -62,12 +63,30 @@ impl GenAlg for Lalr1 {
                     Entry::Occupied(mut e) => resolve_conflict(g, e.get_mut(), new, lookahead)?,
                     Entry::Vacant(e) => {
                         e.insert(new);
-                    },
+                    }
                 }
             }
         }
 
-        Ok(ActionTable { actions })
+        let mut goto = HashMap::new();
+        for rule in g.rules() {
+            let sym = rule.lhs();
+            let mut trans: Vec<_> = cc
+                .transitions_for(sym)
+                .map(|(from, to)| {
+                    (
+                        *map_states.get(&from).unwrap(),
+                        *map_states.get(&to).unwrap(),
+                    )
+                })
+                .collect();
+
+            trans.sort_unstable();
+            trans.dedup();
+            goto.insert(sym, trans);
+        }
+
+        Ok(ActionTable { actions, goto })
     }
 }
 
@@ -88,16 +107,17 @@ mod test {
 
         let g = builder.build(Some(goal));
 
-        let _ = g.action_table::<Lalr1>();
+        assert!(g.action_table::<Lalr1>().is_ok());
     }
-    
+
     #[test]
     fn conflict_resolution() {
         let mut builder = Grammar::builder();
         let [goal, expr, plus, star, num] = builder.syms();
 
         builder.rule(goal).is([expr]);
-        builder.rule(expr)
+        builder
+            .rule(expr)
             .is([expr, plus, expr])
             .is([expr, star, expr])
             .is([num]);
