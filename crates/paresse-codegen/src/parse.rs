@@ -406,7 +406,7 @@ fn parse_rule_config(input: syn::parse::ParseStream) -> syn::Result<RuleAttrs> {
             if l.path.segments.len() == 1 && l.path.segments.first().unwrap().ident == "token" =>
         {
             let entries = l.parse_args_with(
-                Punctuated::<MetaNameValue, Token![,]>::parse_separated_nonempty,
+                Punctuated::<MetaNameValue, Token![,]>::parse_terminated,
             )?;
 
             let mut prec: Option<usize> = None;
@@ -510,7 +510,7 @@ fn parse_config(input: syn::parse::ParseStream, config: &mut Config) -> syn::Res
             }
 
             let entries = l.parse_args_with(
-                Punctuated::<MetaNameValue, Token![,]>::parse_separated_nonempty,
+                Punctuated::<MetaNameValue, Token![,]>::parse_terminated,
             )?;
 
             for entry in entries {
