@@ -78,8 +78,7 @@ impl LexerGenerator {
                     self.reset();
                     while self.sp < self.input.len() {
                         let c = self.input.as_bytes()[self.sp];
-                        let u = paresse::Unit::Byte(c);
-                        match self.transition(u) {
+                        match self.transition_char(c) {
                             Some(new_state) => {
                                 self.state = new_state;
                                 self.sp += 1;
@@ -109,7 +108,7 @@ impl LexerGenerator {
                 fn reset(&mut self) {
                     self.state = #start_state;
 
-                    if let Some(state) = self.transition(paresse::Unit::Boi) {
+                    if let Some(state) = self.transition_boi() {
                         self.state = state;
                     }
 
@@ -146,11 +145,18 @@ impl LexerGenerator {
         quote! { __State::#id }
     }
 
+    /// We generate 3 transition function:
+    /// - transition_boi: transition the begin of input
+    /// - transition_eoi: transition on eoi
+    /// - transition_char: transition for each indivitual char
     fn generate_transition_fn(&self) -> impl ToTokens {
         let dfa = self.scanner.dfa();
         let states = dfa.states_iter();
 
         let mut arms = Vec::new();
+
+        let mut eoi_trans = Vec::new();
+        let mut boi_trans = Vec::new();
 
         for state in states {
             let mut targets: HashMap<usize, Vec<Unit>> = HashMap::new();
@@ -163,44 +169,32 @@ impl LexerGenerator {
             let pat = state_ident(state);
             let inner_arms = targets.iter().map(|(target, units)| {
                 let mut s = ByteSet::empty();
-                let mut has_boi = false;
-                let mut has_eoi = false;
-
-                units.iter().for_each(|u| match u {
-                    Unit::Boi => { has_boi = true; },
-                    Unit::Eoi => { has_eoi = true; },
-                    Unit::Byte(i) => { s.add(*i); },
-                });
-
-                let eoi_branch = has_eoi.then_some(quote! { paresse::Unit::Eoi });
-                let boi_branch = has_boi.then_some(quote! { paresse::Unit::Boi });
-                let spec_pats = eoi_branch.into_iter().chain(boi_branch);
 
                 let target = state_ident(*target);
 
-                let spec_branch = if has_eoi || has_boi {
-                    quote! { #(#spec_pats)|* => Some(__State::#target), }
-                } else  {
-                    quote! { }
-                };
+                units.iter().for_each(|u| match u {
+                    Unit::Boi => boi_trans.push(quote ! { #pat => Some(__State::#target) }),
+                    Unit::Eoi => eoi_trans.push(quote ! { #pat => Some(_State::#target) }),
+                    Unit::Byte(i) => { s.add(*i); },
+                });
+
 
                 let char_branch = if !s.is_empty() {
                     let [r1, r2] = s.into_raw();
                     quote! {
-                        paresse::Unit::Byte(c) if paresse::ByteSet::from_raw([#r1, #r2]).contains(c) => Some(__State::#target),
+                        c if paresse::ByteSet::from_raw([#r1, #r2]).contains(c) => Some(__State::#target),
                     }
                 } else {
                     quote! {}
                 };
 
                 quote! {
-                    #spec_branch
                     #char_branch
                 }
             });
             let arm = quote! {
                 __State::#pat => {
-                    match u {
+                    match c {
                         #(#inner_arms)*
                         _ => None,
                     }
@@ -212,7 +206,23 @@ impl LexerGenerator {
 
         quote! {
             #[inline(always)]
-            fn transition(&self, u: paresse::Unit) -> Option<__State> {
+            fn transition_boi(&self) -> Option<__State> {
+                match self.state {
+                    #(#boi_trans,)*
+                    _ => None,
+                }
+            }
+
+            #[inline(always)]
+            fn transition_eoi(&self) -> Option<__State> {
+                match self.state {
+                    #(#eoi_trans,)*
+                    _ => None,
+                }
+            }
+
+            #[inline(always)]
+            fn transition_char(&self, c: u8) -> Option<__State> {
                 match self.state {
                     #(#arms,)*
                 }
