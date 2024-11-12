@@ -78,6 +78,7 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
             .get_ident(self.grammar.grammar().goal())
             .unwrap();
         let non_terminals_enum = self.gen_non_terminals_enum();
+        let goto_fns = self.gen_goto_funs();
         Ok(quote! {
             enum StackItem {
                 State(u32),
@@ -85,6 +86,7 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
                 Node(NonTerminals),
             }
 
+            #goto_fns
             #non_terminals_enum
 
             pub struct Parser<'input> {
@@ -149,7 +151,6 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
                 from: cci,
                 action,
                 grammar: self.grammar,
-                action_table: &self.action_table,
             });
 
         Ok(quote! {
@@ -169,13 +170,35 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
             }
         }
     }
+
+    fn gen_goto_funs(&self) -> impl ToTokens {
+        let nts = self.grammar.grammar().non_terminals();
+        let fns = nts.iter().map(|nt| {
+            let trans = self.action_table.goto(nt)
+                .map(|(from, to)| quote! { #from => #to });
+
+            let name = format_ident!("__goto_{}", nt.as_u32());
+            quote! {
+                fn #name(state: u32) -> u32 {
+                    match state {
+                        #(#trans,)*
+                        invalid => unreachable!("invalid transition {invalid}"),
+                    }
+                }
+            }
+        });
+
+        quote! {
+            #(#fns)*
+
+        }
+    }
 }
 
 struct GenAction<'a> {
     from: u32,
     action: Action,
     grammar: &'a hir::GrammarHir,
-    action_table: &'a ActionTable,
 }
 
 impl ToTokens for GenAction<'_> {
@@ -190,7 +213,6 @@ impl ToTokens for GenAction<'_> {
             Action::Reduce { rule, symbol } => GenReduce {
                 rule: &self.grammar.rules()[rule],
                 from: self.from,
-                action_table: self.action_table,
                 symbol,
             }
             .to_tokens(tokens),
@@ -227,7 +249,6 @@ struct GenReduce<'a> {
     rule: &'a Rule,
     from: u32,
     symbol: SymbolId,
-    action_table: &'a ActionTable,
 }
 
 impl GenReduce<'_> {
@@ -242,16 +263,9 @@ impl GenReduce<'_> {
 
     /// generate code handling the transition to the next state in a reduce operation.
     fn gen_next_state_transition(&self) -> impl ToTokens {
-        let transitions = self
-            .action_table
-            .goto(self.rule.lhs().sym_id)
-            .map(|(from, to)| quote! { #from => #to });
+        let goto_fn = format_ident!("__goto_{}", self.rule.lhs().sym_id.as_u32());
         quote! {
-            let next = match state {
-                #(#transitions,)*
-                invalid => unreachable!("invalid transition {invalid}, {t:?}"),
-            };
-            parser.stack.push(StackItem::State(next));
+            parser.stack.push(StackItem::State(#goto_fn(state)));
         }
     }
 
