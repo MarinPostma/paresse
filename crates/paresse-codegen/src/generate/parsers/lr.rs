@@ -1,9 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::marker::PhantomData;
 
 use paresse_core::grammar::{AcceptAction, Action, ActionTable, GenAlg, ReduceAction, ShiftAction};
 use paresse_core::grammar::{ActionTableError, Symbol as SymbolId};
 use quote::{format_ident, quote, ToTokens};
+use syn::Ident;
 
 use crate::hir::{GrammarHir, Rule, Symbol};
 
@@ -17,16 +18,19 @@ pub struct LRGenerator<'g, Gen> {
 
 struct Actions<'g> {
     grammar: &'g GrammarHir,
-    shifts: HashMap<u32, HashSet<ShiftAction>>,
-    reduces: HashMap<u32, HashSet<ReduceAction>>,
-    accepts: HashMap<u32, AcceptAction>,
+    from: u32,
+    shifts: HashSet<ShiftAction>,
+    reduces: HashSet<ReduceAction>,
+    accepts: Option<AcceptAction>,
 }
 
 impl<'g> Actions<'g> {
     fn new(
         grammar: &'g GrammarHir,
+        from: u32,
     ) -> Self {
         Self {
+            from,
             grammar,
             shifts: Default::default(),
             reduces: Default::default(),
@@ -38,24 +42,21 @@ impl<'g> Actions<'g> {
 /// generates action branches
 impl ToTokens for Actions<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        for (&from, actions) in self.shifts.iter() {
-            GenShift { from, actions }.to_tokens(tokens)
+        if !self.shifts.is_empty() {
+            GenShift { actions: &self.shifts }.to_tokens(tokens);
         }
 
-        for (&from, reduces) in self.reduces.iter() {
-            for reduce in reduces {
-                GenReduce {
-                    rule: self.grammar.rule(reduce.rule),
-                    from,
-                    symbol: reduce.symbol,
-                }
-                .to_tokens(tokens);
+        for reduce in self.reduces.iter() {
+            GenReduce {
+                rule: self.grammar.rule(reduce.rule),
+                from: self.from,
+                symbol: reduce.symbol,
             }
+                .to_tokens(tokens);
         }
 
-        for (&from, accept) in self.accepts.iter() {
+        if let Some(accept) = self.accepts {
             GenAccept {
-                from,
                 rule: self.grammar.rule(accept.rule),
             }.to_tokens(tokens)
         }
@@ -116,26 +117,27 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
     }
 
     pub fn generate(&self) -> syn::Result<impl ToTokens> {
-        let rules = self.gen_rules()?;
-        let fallback = quote! {
-            _ => panic!("error!"),
-        };
         let goal_ty = self
             .grammar
             .non_terminals()
             .get_ident(self.grammar.grammar().goal())
             .unwrap();
+        let rule_fns = self.gen_rules(goal_ty)?;
         let non_terminals_enum = self.gen_non_terminals_enum();
         let goto_fns = self.gen_goto_funs();
+        let init_rule = state_fn_name(0);
         Ok(quote! {
             enum StackItem {
-                State(u32),
+                State((StateFnPtr, u32)),
                 Token(paresse::Token),
                 Node(NonTerminals),
             }
 
+            type StateFnPtr = for<'a> fn(&mut Parser<'a>, Option<u16>) -> Option<#goal_ty>;
+
             #goto_fns
             #non_terminals_enum
+            #rule_fns
 
             pub struct Parser<'input> {
                 stack: Vec<StackItem>,
@@ -144,7 +146,7 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
             }
 
             impl<'input> Parser<'input> {
-                fn state(&self) -> u32 {
+                fn state(&self) -> (StateFnPtr, u32) {
                     match self.stack.last() {
                         Some(StackItem::State(state)) => *state,
                         _ => unreachable!("top of stack is not state"),
@@ -153,10 +155,9 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
 
                 fn run_parse(&mut self) -> #goal_ty {
                     loop {
-                        let state = self.state();
-                        match (state, self.lookahead.map(|t| t.kind)) {
-                            #rules
-                            #fallback
+                        let (state_fn, _) = self.state();
+                        if let Some(goal) = state_fn(self, self.lookahead.map(|t| t.kind)) {
+                            return goal
                         }
                     }
                 }
@@ -173,7 +174,7 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
                     let mut parser = Self {
                         tokens,
                         lookahead,
-                        stack: vec![StackItem::State(0)],
+                        stack: vec![StackItem::State((#init_rule, 0))],
                     };
                     parser.run_parse()
                 }
@@ -181,28 +182,41 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
         })
     }
 
-    fn gen_rules(&self) -> syn::Result<impl ToTokens + '_> {
-        let mut actions = Actions::new(self.grammar);
-
+    fn gen_rules(&self, goal_ty: &Ident) -> syn::Result<impl ToTokens + '_> {
+        let mut state_fns = Vec::with_capacity(self.action_table.num_states());
         for cci in 0..self.action_table.num_states() as u32 {
+            let mut actions = Actions::new(self.grammar, cci);
             let acts = self.action_table.actions(cci);
             for (_s, act) in acts {
                 match act {
                     Action::Shift(s) => {
-                        actions.shifts.entry(cci).or_default().insert(s);
+                        actions.shifts.insert(s);
                     }
                     Action::Reduce(r) => {
-                        actions.reduces.entry(cci).or_default().insert(r);
+                        actions.reduces.insert(r);
                     }
                     Action::Accept(a) => {
-                        actions.accepts.insert(cci, a);
+                        actions.accepts = Some(a);
                     }
                     Action::Error => (),
                 }
             }
+
+            let fname = state_fn_name(cci);
+            let state_fn = quote! {
+                fn #fname(parser: &mut Parser, sym: Option<u16>) -> Option<#goal_ty> {
+                    match sym {
+                        #actions
+                        _ => panic!("handle error")
+                    }
+                    None
+                }
+            };
+
+            state_fns.push(state_fn)
         }
 
-        Ok(actions)
+        Ok(quote! { #(#state_fns)* })
     }
 
     fn gen_non_terminals_enum(&self) -> impl ToTokens {
@@ -224,11 +238,14 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
             let trans = self
                 .action_table
                 .goto(nt)
-                .map(|(from, to)| quote! { #from => #to });
+                .map(|(from, to)| {
+                    let to_fn = state_fn_name(to);
+                    quote! { #from => (#to_fn, #to) }
+                });
 
             let name = format_ident!("__goto_{}", nt.as_u32());
             quote! {
-                fn #name(state: u32) -> u32 {
+                fn #name(state: u32) -> (StateFnPtr, u32) {
                     match state {
                         #(#trans,)*
                         invalid => unreachable!("invalid transition {invalid}"),
@@ -245,18 +262,16 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
 }
 
 struct GenAccept<'a> {
-    from: u32,
     rule: &'a Rule,
 }
 
 impl ToTokens for GenAccept<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let from = self.from;
-        let reduce = gen_reduce(self.rule, quote! { self });
+        let reduce = gen_reduce(self.rule, quote! { parser });
 
         quote! {
-            (#from, None) => {
-                return #reduce;
+            None => {
+                return Some(#reduce);
             }
         }
         .to_tokens(tokens)
@@ -265,8 +280,8 @@ impl ToTokens for GenAccept<'_> {
 
 struct GenReduce<'a> {
     rule: &'a Rule,
-    from: u32,
     symbol: SymbolId,
+    from: u32,
 }
 
 impl GenReduce<'_> {
@@ -296,7 +311,7 @@ impl GenReduce<'_> {
         let reduce_fn = quote! {
             fn #reduce_fn_name(parser: &mut Parser, t: Option<u16>) {
                 let out = #reduced;
-                let state = parser.state();
+                let (_, state) = parser.state();
                 parser.stack.push(StackItem::Node(NonTerminals::#reduce_type(out)));
                 #state_trans
             }
@@ -304,7 +319,7 @@ impl GenReduce<'_> {
 
         quote! {
             #reduce_fn
-            #reduce_fn_name(self, t);
+            #reduce_fn_name(parser, t);
         }
     }
 }
@@ -313,10 +328,9 @@ impl ToTokens for GenReduce<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let match_token = self.gen_match_token();
         let reduce = self.gen_reduce();
-        let cci = self.from;
 
         quote! {
-            (#cci, t@#match_token) => {
+            t@#match_token => {
                 // reduce
                 #reduce
             }
@@ -326,7 +340,6 @@ impl ToTokens for GenReduce<'_> {
 }
 
 struct GenShift<'a> {
-    from: u32,
     actions: &'a HashSet<ShiftAction>,
 }
 
@@ -335,16 +348,16 @@ impl ToTokens for GenShift<'_> {
         let s = self.actions.iter().map(|a| a.symbol.as_u32() as u16);
         let to = self.actions.iter().map(|a| {
             let s = a.symbol.as_u32() as u16;
-            let to = a.state;
-            quote! { #s => #to }
+            let to_state = a.state;
+            let to = state_fn_name(to_state);
+            quote! { #s => (#to, #to_state) }
         });
-        let from = self.from;
         quote! {
-            (#from, Some(s @ (#(#s)|*))) => {
+            Some(s @ (#(#s)|*)) => {
                 // shift
-                let current = self.advance().unwrap();
-                self.stack.push(StackItem::Token(current));
-                self.stack.push(StackItem::State(match s {
+                let current = parser.advance().unwrap();
+                parser.stack.push(StackItem::Token(current));
+                parser.stack.push(StackItem::State(match s {
                     #(#to,)*
                     _ => unreachable!(),
                 }));
@@ -421,4 +434,8 @@ fn gen_reduce(rule: &Rule, target: impl ToTokens) -> impl ToTokens {
             #handler
         }
     }
+}
+
+fn state_fn_name(cci: u32) -> Ident {
+    format_ident!("__state_{cci}")
 }
