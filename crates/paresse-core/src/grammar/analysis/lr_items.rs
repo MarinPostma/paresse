@@ -96,7 +96,7 @@ impl LrItem {
                     });
                 }
             }
-            Action::Error
+            Action::Useless
         } else if self.lookahead == Symbol::eof() && self.rule(g).lhs() == g.goal() {
             Action::Accept(AcceptAction {
                 rule: self.rule_id(),
@@ -118,13 +118,13 @@ impl LrItem {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ShiftAction{ pub state: u32, pub symbol: Symbol }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ReduceAction{ pub rule: usize, pub symbol: Symbol }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AcceptAction{ pub rule: usize }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -132,7 +132,7 @@ pub enum Action {
     Shift(ShiftAction),
     Reduce(ReduceAction),
     Accept(AcceptAction),
-    Error,
+    Useless,
 }
 impl Action {
     pub fn is_shift(&self) -> bool {

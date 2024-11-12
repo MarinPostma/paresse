@@ -211,6 +211,7 @@ impl LexerGenerator {
         }
 
         quote! {
+            #[inline(always)]
             fn transition(&self, u: paresse::Unit) -> Option<__State> {
                 match self.state {
                     #(#arms,)*

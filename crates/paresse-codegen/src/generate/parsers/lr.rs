@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use paresse_core::grammar::{AcceptAction, Action, ActionTable, GenAlg, ReduceAction, ShiftAction};
@@ -19,8 +19,8 @@ pub struct LRGenerator<'g, Gen> {
 struct Actions<'g> {
     grammar: &'g GrammarHir,
     from: u32,
-    shifts: HashSet<ShiftAction>,
-    reduces: HashSet<ReduceAction>,
+    shifts: BTreeSet<ShiftAction>,
+    reduces: BTreeSet<ReduceAction>,
     accepts: Option<AcceptAction>,
 }
 
@@ -171,10 +171,13 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
                 pub fn parse(s: &'input str) -> #goal_ty {
                     let mut tokens = Scan::new(s);
                     let lookahead = tokens.next().transpose().unwrap();
+                    let mut stack = Vec::with_capacity(32);
+                    stack.push(StackItem::State((#init_rule, 0)));
+
                     let mut parser = Self {
                         tokens,
                         lookahead,
-                        stack: vec![StackItem::State((#init_rule, 0))],
+                        stack,
                     };
                     parser.run_parse()
                 }
@@ -198,7 +201,7 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
                     Action::Accept(a) => {
                         actions.accepts = Some(a);
                     }
-                    Action::Error => (),
+                    Action::Useless => (),
                 }
             }
 
@@ -340,7 +343,7 @@ impl ToTokens for GenReduce<'_> {
 }
 
 struct GenShift<'a> {
-    actions: &'a HashSet<ShiftAction>,
+    actions: &'a BTreeSet<ShiftAction>,
 }
 
 impl ToTokens for GenShift<'_> {

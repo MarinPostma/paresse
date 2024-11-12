@@ -64,6 +64,7 @@ impl ByteSet {
         self.0[bucket as usize] |= 1 << bit as u128
     }
 
+    #[inline(always)]
     pub fn contains(&self, byte: u8) -> bool {
         let bucket = byte / 128;
         let bit = byte % 128;

@@ -21,7 +21,7 @@ impl GenAlg for Lr1 {
                     Action::Shift(ShiftAction { symbol, .. }) => symbol,
                     Action::Reduce(ReduceAction { .. }) => item.lookahead(),
                     Action::Accept(_) => Symbol::eof(),
-                    Action::Error => continue,
+                    Action::Useless => continue,
                 };
 
                 let new = ActionTableSlot {

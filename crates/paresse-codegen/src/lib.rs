@@ -63,7 +63,7 @@ fn grammar_inner(ast: GrammarAst) -> syn::Result<TokenStream> {
 
     Ok(quote::quote! {
         mod parser {
-            #![allow(non_snake_case)]
+            #![allow(non_snake_case, unreachable_code)]
             use super::*;
             #lexer
             #parser

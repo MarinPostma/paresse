@@ -56,7 +56,7 @@ impl GenAlg for Lalr1 {
                     Action::Shift(ShiftAction { symbol, .. }) => symbol,
                     Action::Reduce(ReduceAction { .. }) => item.lookahead(),
                     Action::Accept(_) => Symbol::eof(),
-                    Action::Error => continue,
+                    Action::Useless => continue,
                 };
 
                 match actions[cci_mapped as usize].entry(lookahead) {
