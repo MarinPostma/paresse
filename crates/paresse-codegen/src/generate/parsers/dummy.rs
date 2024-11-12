@@ -1,6 +1,8 @@
+use paresse_core::grammar::AcceptAction;
 use paresse_core::grammar::ActionTable;
 use paresse_core::grammar::ActionTableError;
 use paresse_core::grammar::GenAlg;
+use paresse_core::grammar::ReduceAction;
 use quote::format_ident;
 use quote::quote;
 use quote::ToTokens;
@@ -84,8 +86,8 @@ impl<'g, Gen: GenAlg> DummyGenerator<'g, Gen> {
     fn gen_rule(&self, cci: u32, generated_fns: &mut Vec<Ident>) -> syn::Result<impl ToTokens> {
         let handlers = self.action_table.actions(cci).filter_map(|(l, a)| {
             let rule_id = match a {
-                paresse_core::grammar::Action::Reduce { rule, .. } => rule,
-                paresse_core::grammar::Action::Accept { rule } => rule,
+                paresse_core::grammar::Action::Reduce(ReduceAction { rule, .. }) => rule,
+                paresse_core::grammar::Action::Accept(AcceptAction { rule}) => rule,
                 _ => return None,
             };
             let rule = self.grammar.rule(rule_id);

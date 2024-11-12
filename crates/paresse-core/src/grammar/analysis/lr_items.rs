@@ -78,34 +78,34 @@ impl LrItem {
             if s.is_epsilon() {
                 let follow = g.follow_sets().follow(self.rule(g).lhs());
                 if follow.contains(self.lookahead) {
-                    return Action::Reduce {
+                    return Action::Reduce(ReduceAction {
                         rule: self.rule_id(),
                         symbol: self.lookahead,
-                    };
+                    });
                 } else if let Some(to) = cc.transition(from, s) {
-                    return Action::Shift {
+                    return Action::Shift(ShiftAction {
                         state: to,
                         symbol: s,
-                    };
+                    });
                 }
             } else if g.is_terminal(s) {
                 if let Some(to) = cc.transition(from, s) {
-                    return Action::Shift {
+                    return Action::Shift(ShiftAction {
                         state: to,
                         symbol: s,
-                    };
+                    });
                 }
             }
             Action::Error
         } else if self.lookahead == Symbol::eof() && self.rule(g).lhs() == g.goal() {
-            Action::Accept {
+            Action::Accept(AcceptAction {
                 rule: self.rule_id(),
-            }
+            })
         } else {
-            Action::Reduce {
+            Action::Reduce(ReduceAction {
                 rule: self.rule_id(),
                 symbol: self.lookahead,
-            }
+            })
         }
     }
 
@@ -119,10 +119,19 @@ impl LrItem {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ShiftAction{ pub state: u32, pub symbol: Symbol }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ReduceAction{ pub rule: usize, pub symbol: Symbol }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AcceptAction{ pub rule: usize }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Action {
-    Shift { state: u32, symbol: Symbol },
-    Reduce { rule: usize, symbol: Symbol },
-    Accept { rule: usize },
+    Shift(ShiftAction),
+    Reduce(ReduceAction),
+    Accept(AcceptAction),
     Error,
 }
 impl Action {

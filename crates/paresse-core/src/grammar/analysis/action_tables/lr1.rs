@@ -1,6 +1,6 @@
 use std::collections::{hash_map::Entry, HashMap};
 
-use crate::grammar::{Action, Grammar, Symbol};
+use crate::grammar::{Action, Grammar, ReduceAction, ShiftAction, Symbol};
 
 use super::conflict::resolve_conflict;
 use super::{ActionTable, ActionTableError, ActionTableSlot, GenAlg};
@@ -18,9 +18,9 @@ impl GenAlg for Lr1 {
             for item in col {
                 let action = item.action(g, idx);
                 let c = match action {
-                    Action::Shift { symbol, .. } => symbol,
-                    Action::Reduce { .. } => item.lookahead(),
-                    Action::Accept { .. } => Symbol::eof(),
+                    Action::Shift(ShiftAction { symbol, .. }) => symbol,
+                    Action::Reduce(ReduceAction { .. }) => item.lookahead(),
+                    Action::Accept(_) => Symbol::eof(),
                     Action::Error => continue,
                 };
 

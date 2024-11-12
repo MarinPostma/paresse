@@ -1,10 +1,11 @@
+use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 
-use paresse_core::grammar::{Action, ActionTable, GenAlg};
+use paresse_core::grammar::{AcceptAction, Action, ActionTable, GenAlg, ReduceAction, ShiftAction};
 use paresse_core::grammar::{ActionTableError, Symbol as SymbolId};
 use quote::{format_ident, quote, ToTokens};
 
-use crate::hir::{self, GrammarHir, Rule, Symbol};
+use crate::hir::{GrammarHir, Rule, Symbol};
 
 /// Generate a direct-coded parsed of the LR family. The parser generated depends on the Gen type
 /// parameter.
@@ -12,6 +13,53 @@ pub struct LRGenerator<'g, Gen> {
     grammar: &'g GrammarHir,
     action_table: ActionTable,
     _p: PhantomData<Gen>,
+}
+
+struct Actions<'g> {
+    grammar: &'g GrammarHir,
+    shifts: HashMap<u32, HashSet<ShiftAction>>,
+    reduces: HashMap<u32, HashSet<ReduceAction>>,
+    accepts: HashMap<u32, AcceptAction>,
+}
+
+impl<'g> Actions<'g> {
+    fn new(
+        grammar: &'g GrammarHir,
+    ) -> Self {
+        Self {
+            grammar,
+            shifts: Default::default(),
+            reduces: Default::default(),
+            accepts: Default::default(),
+        }
+    }
+}
+
+/// generates action branches
+impl ToTokens for Actions<'_> {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        for (&from, actions) in self.shifts.iter() {
+            GenShift { from, actions }.to_tokens(tokens)
+        }
+
+        for (&from, reduces) in self.reduces.iter() {
+            for reduce in reduces {
+                GenReduce {
+                    rule: self.grammar.rule(reduce.rule),
+                    from,
+                    symbol: reduce.symbol,
+                }
+                .to_tokens(tokens);
+            }
+        }
+
+        for (&from, accept) in self.accepts.iter() {
+            GenAccept {
+                from,
+                rule: self.grammar.rule(accept.rule),
+            }.to_tokens(tokens)
+        }
+    }
 }
 
 impl<'g, Gen: GenAlg> ToTokens for LRGenerator<'g, Gen> {
@@ -133,29 +181,28 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
         })
     }
 
-    fn gen_rules(&self) -> syn::Result<impl ToTokens> {
-        let rules = (0..self.action_table.num_states())
-            .map(|i| self.gen_rule(i as u32))
-            .collect::<syn::Result<Vec<_>>>()?;
+    fn gen_rules(&self) -> syn::Result<impl ToTokens + '_> {
+        let mut actions = Actions::new(self.grammar);
 
-        Ok(quote! {
-            #(#rules)*
-        })
-    }
+        for cci in 0..self.action_table.num_states() as u32 {
+            let acts = self.action_table.actions(cci);
+            for (_s, act) in acts {
+                match act {
+                    Action::Shift(s) => {
+                        actions.shifts.entry(cci).or_default().insert(s);
+                    }
+                    Action::Reduce(r) => {
+                        actions.reduces.entry(cci).or_default().insert(r);
+                    }
+                    Action::Accept(a) => {
+                        actions.accepts.insert(cci, a);
+                    }
+                    Action::Error => (),
+                }
+            }
+        }
 
-    fn gen_rule(&self, cci: u32) -> syn::Result<impl ToTokens> {
-        let t_rules = self
-            .action_table
-            .actions(cci)
-            .map(|(_s, action)| GenAction {
-                from: cci,
-                action,
-                grammar: self.grammar,
-            });
-
-        Ok(quote! {
-            #(#t_rules)*
-        })
+        Ok(actions)
     }
 
     fn gen_non_terminals_enum(&self) -> impl ToTokens {
@@ -174,7 +221,9 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
     fn gen_goto_funs(&self) -> impl ToTokens {
         let nts = self.grammar.grammar().non_terminals();
         let fns = nts.iter().map(|nt| {
-            let trans = self.action_table.goto(nt)
+            let trans = self
+                .action_table
+                .goto(nt)
                 .map(|(from, to)| quote! { #from => #to });
 
             let name = format_ident!("__goto_{}", nt.as_u32());
@@ -191,37 +240,6 @@ impl<'g, Gen: GenAlg> LRGenerator<'g, Gen> {
         quote! {
             #(#fns)*
 
-        }
-    }
-}
-
-struct GenAction<'a> {
-    from: u32,
-    action: Action,
-    grammar: &'a hir::GrammarHir,
-}
-
-impl ToTokens for GenAction<'_> {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        match self.action {
-            Action::Shift { state, symbol } => GenShift {
-                from: self.from,
-                to: state,
-                sym: symbol,
-            }
-            .to_tokens(tokens),
-            Action::Reduce { rule, symbol } => GenReduce {
-                rule: &self.grammar.rules()[rule],
-                from: self.from,
-                symbol,
-            }
-            .to_tokens(tokens),
-            Action::Accept { rule } => GenAccept {
-                from: self.from,
-                rule: &self.grammar.rules()[rule],
-            }
-            .to_tokens(tokens),
-            Action::Error => quote! {}.to_tokens(tokens),
         }
     }
 }
@@ -307,23 +325,29 @@ impl ToTokens for GenReduce<'_> {
     }
 }
 
-struct GenShift {
+struct GenShift<'a> {
     from: u32,
-    to: u32,
-    sym: SymbolId,
+    actions: &'a HashSet<ShiftAction>,
 }
 
-impl ToTokens for GenShift {
+impl ToTokens for GenShift<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let s = self.sym.as_u32() as u16;
-        let to = self.to;
+        let s = self.actions.iter().map(|a| a.symbol.as_u32() as u16);
+        let to = self.actions.iter().map(|a| {
+            let s = a.symbol.as_u32() as u16;
+            let to = a.state;
+            quote! { #s => #to }
+        });
         let from = self.from;
         quote! {
-            (#from, Some(t@#s)) => {
+            (#from, Some(s @ (#(#s)|*))) => {
                 // shift
                 let current = self.advance().unwrap();
                 self.stack.push(StackItem::Token(current));
-                self.stack.push(StackItem::State(#to));
+                self.stack.push(StackItem::State(match s {
+                    #(#to,)*
+                    _ => unreachable!(),
+                }));
             }
         }
         .to_tokens(tokens)

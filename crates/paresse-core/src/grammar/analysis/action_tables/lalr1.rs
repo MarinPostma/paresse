@@ -1,7 +1,7 @@
 use std::collections::{hash_map::Entry, BTreeSet, HashMap};
 
 use crate::grammar::{
-    analysis::action_tables::conflict::resolve_conflict, Action, Grammar, Symbol,
+    analysis::action_tables::conflict::resolve_conflict, Action, Grammar, ReduceAction, ShiftAction, Symbol
 };
 
 use super::{ActionTable, ActionTableError, ActionTableSlot, GenAlg};
@@ -40,10 +40,10 @@ impl GenAlg for Lalr1 {
         for (cci, c) in cc.collections() {
             for item in c.iter() {
                 let action = match item.action(g, cci) {
-                    Action::Shift { state, symbol } => Action::Shift {
+                    Action::Shift(ShiftAction { state, symbol }) => Action::Shift(ShiftAction {
                         state: *map_states.get(&state).unwrap(),
                         symbol,
-                    },
+                    }),
                     other => other,
                 };
                 let cci_mapped = *map_states.get(&cci).unwrap();
@@ -53,9 +53,9 @@ impl GenAlg for Lalr1 {
                 };
 
                 let lookahead = match action {
-                    Action::Shift { symbol, .. } => symbol,
-                    Action::Reduce { .. } => item.lookahead(),
-                    Action::Accept { .. } => Symbol::eof(),
+                    Action::Shift(ShiftAction { symbol, .. }) => symbol,
+                    Action::Reduce(ReduceAction { .. }) => item.lookahead(),
+                    Action::Accept(_) => Symbol::eof(),
                     Action::Error => continue,
                 };
 
