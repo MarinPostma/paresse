@@ -167,36 +167,22 @@ impl LexerGenerator {
             }
 
             let pat = state_ident(state);
-            let inner_arms = targets.iter().map(|(target, units)| {
-                let mut s = ByteSet::empty();
-
+            let mut states = vec![quote! {__State::Invalid}; 256];
+            targets.iter().for_each(|(target, units)| {
                 let target = state_ident(*target);
-
                 units.iter().for_each(|u| match u {
                     Unit::Boi => boi_trans.push(quote ! { #pat => Some(__State::#target) }),
                     Unit::Eoi => eoi_trans.push(quote ! { #pat => Some(_State::#target) }),
-                    Unit::Byte(i) => { s.add(*i); },
+                    Unit::Byte(i) => { states[*i as usize] = quote!{ __State::#target }; },
                 });
-
-
-                let char_branch = if !s.is_empty() {
-                    let [r1, r2] = s.into_raw();
-                    quote! {
-                        c if paresse::ByteSet::from_raw([#r1, #r2]).contains(c) => Some(__State::#target),
-                    }
-                } else {
-                    quote! {}
-                };
-
-                quote! {
-                    #char_branch
-                }
             });
+
             let arm = quote! {
                 __State::#pat => {
-                    match c {
-                        #(#inner_arms)*
-                        _ => None,
+                    const MAP: &[__State; 256] = &[#(#states),*];
+                    match MAP[c as usize] {
+                        __State::Invalid => None,
+                        s => Some(s),
                     }
                 }
             };
@@ -225,6 +211,7 @@ impl LexerGenerator {
             fn transition_char(&self, c: u8) -> Option<__State> {
                 match self.state {
                     #(#arms,)*
+                    _ => unreachable!(),
                 }
             }
         }
@@ -238,6 +225,7 @@ impl LexerGenerator {
             #[derive(Clone, Copy)]
             enum __State {
                 #(#state_variants,)*
+                Invalid,
             }
         }
     }
